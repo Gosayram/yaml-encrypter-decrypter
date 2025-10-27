@@ -101,7 +101,7 @@ jobs:
           results_format: sarif
           publish_results: true
       - name: Upload artifact
-        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # main
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # main
         with:
           name: 'OSSF Sarif file'
           path: 'ossf-results.sarif'
