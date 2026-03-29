@@ -1,3 +1,6 @@
+# GoReleaser config for YAML Encrypter/Decrypter
+# Version is read from .release-version into RELEASE_VERSION
+
 version: 2
 
 project_name: yed
@@ -26,14 +29,17 @@ builds:
     goarch:
       - amd64
       - arm64
+    goarm:
+      - "7"
+    ignore:
+      - goos: darwin
+        goarch: arm64
+        goarm: "7"
 
 archives:
   - id: default
-    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    formats: [tar.gz]
-    format_overrides:
-      - goos: windows
-        formats: [zip]
+    # Includes built binaries + files below
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
     files:
       - README.md
       - LICENSE
@@ -79,18 +85,28 @@ release:
 
     Release {{ .Tag }} of YAML Encrypter/Decrypter.
 
-    Commit format used in this release:
-    `[TYPE] - description;`
+    ### Docker Images (signed with Cosign)
 
-    ### Docker Image
+    Docker image is available at GitHub Container Registry (ghcr.io) and signed with Cosign:
+    - `{{ .Version }}` and `latest`
 
-    Docker image is available at GitHub Container Registry (ghcr.io):
-    - `ghcr.io/{{ .Env.DOCKER_REPO_PATH }}:{{ .Version }}`
-    - `ghcr.io/{{ .Env.DOCKER_REPO_PATH }}:latest`
+    Verify image signatures using the public key from the repository:
+
+    ```bash
+    export USERNAME=<your-github-username>
+    cosign login ghcr.io -u "$USERNAME"
+    cosign verify --key cosign.pub ghcr.io/{{ .Env.DOCKER_REPO_PATH }}:{{ .Version }}
+    ```
+
+    The `cosign.pub` file is available in the repository root.
 
     ### Binaries (signed with GPG)
 
-    This release includes the `yed` binary for Linux, macOS and Windows (amd64/arm64), signed with GPG.
+    This release includes the `yed` binary, signed with GPG.
+
+    ### Installation
+
+    Download the appropriate binary or archive for your platform from the assets below.
 
     ### Verification
 
@@ -105,6 +121,15 @@ release:
     ```bash
     gpg --verify {{ .ProjectName }}_{{ .Version }}_checksums.txt.sig {{ .ProjectName }}_{{ .Version }}_checksums.txt
     ```
+
+    Verify binary signatures:
+
+    ```bash
+    # For Linux amd64
+    gpg --verify yed_linux_amd64.sig yed
+
+    # For other platforms, replace linux_amd64 with your platform (e.g., darwin_arm64, windows_amd64)
+    ```
   footer: |
     **Full Changelog**: {{ .Env.GITHUB_REPO_URL }}/compare/{{ .PreviousTag }}...{{ .Tag }}
 
@@ -114,60 +139,62 @@ changelog:
   format: "{{ .SHA }}: {{ .Message }}{{ with .AuthorUsername }} (@{{ . }}){{ end }}"
   filters:
     exclude:
-      - "^Merge pull request"
-      - "^Merge branch"
+      - "^test:"
+      - "^test\\("
+      - "^chore: update$"
+      - "^chore: docs$"
+      - "^docs: update$"
+      - "^chore: schema$"
+      - "^chore: typo$"
+      - "^chore: auto-update generated files$"
+      - "^chore: update schema$"
+      - "^chore: schema update$"
+      - "^chore\\(deps\\): "
+      - "^(build|ci): "
+      - "merge conflict"
+      - "merge conflict"
       - Merge pull request
       - Merge remote-tracking branch
       - Merge branch
       - go mod tidy
   groups:
-    - title: "INIT"
-      regexp: '^.*?\[INIT\]\s*-\s.*;\s*$'
+    - title: "New Features"
+      regexp: '^.*?(\[ADD\]|\[FEATURE\]|\[INIT\]|feat(\(.+\))?!?:|feature(\(.+\))?!?:|add(\(.+\))?!?:|init(\(.+\))?!?:|\[feature\/.+\]).*$'
       order: 100
-    - title: "ADD"
-      regexp: '^.*?\[ADD\]\s*-\s.*;\s*$'
-      order: 110
-    - title: "FEATURE"
-      regexp: '^.*?\[FEATURE\]\s*-\s.*;\s*$'
+    - title: "Performance improvements"
+      regexp: '^.*?(\[perf\]|perf(\(.+\))?!?:).*$'
       order: 120
-    - title: "UPD"
-      regexp: '^.*?\[UPD\]\s*-\s.*;\s*$'
+    - title: "Security updates"
+      regexp: '^.*?sec(\(.+\))?!?:.+$'
       order: 150
-    - title: "FIX"
-      regexp: '^.*?\[FIX\]\s*-\s.*;\s*$'
+    - title: "Bug fixes"
+      regexp: '^.*?(\[FIX\]|\[BUGFIX\]|fix(\(.+\))?!?:|bugfix(\(.+\))?!?:).*$'
       order: 200
-    - title: "BUGFIX"
-      regexp: '^.*?\[BUGFIX\]\s*-\s.*;\s*$'
-      order: 210
-    - title: "REFACTOR"
-      regexp: '^.*?\[REFACTOR\]\s*-\s.*;\s*$'
+    - title: "Refactoring"
+      regexp: '^.*?(\[REFACTOR\]|refactor(\(.+\))?!?:).*$'
       order: 250
-    - title: "STYLE"
-      regexp: '^.*?\[STYLE\]\s*-\s.*;\s*$'
+    - title: "Updates and Enhancements"
+      regexp: '^.*?\[UPD\].*$'
       order: 300
-    - title: "LINT"
-      regexp: '^.*?\[LINT\]\s*-\s.*;\s*$'
-      order: 350
-    - title: "RULE"
-      regexp: '^.*?\[RULE\]\s*-\s.*;\s*$'
-      order: 380
-    - title: "DOCS"
-      regexp: '^.*?\[DOCS\]\s*-\s.*;\s*$'
+    - title: "Documentation updates"
+      regexp: '^.*?(\[DOCS\]|docs?(\(.+\))?!?:).*$'
       order: 400
-    - title: "TEST"
-      regexp: '^.*?\[TEST\]\s*-\s.*;\s*$'
+    - title: "Tests"
+      regexp: '^.*?(\[TEST\]|test(\(.+\))?!?:).*$'
       order: 450
-    - title: "CI"
-      regexp: '^.*?\[CI\]\s*-\s.*;\s*$'
+    - title: "CI and Build"
+      regexp: '^.*?(\[CI\]|\[CHORE\]|\[LINT\]|ci(\(.+\))?!?:|build(\(.+\))?!?:|chore(\(.+\))?!?:|lint(\(.+\))?!?:).*$'
       order: 500
+    - title: "Dependencies"
+      regexp: '^.*?Bump .*$'
+      order: 600
     - title: "Other work"
       order: 9999
 
 announce:
   telegram:
     enabled: true
-    chat_id: "{{ .Env.TELEGRAM_CHAT_ID }}"
-    parse_mode: MarkdownV2
+    chat_id: "{{ .Env.YED_CHAT_ID }}"
     message_template: |
       🎉 *{{ mdv2escape .ProjectName }} {{ mdv2escape .Tag }}* {{ mdv2escape "is out!" }}
 
@@ -180,14 +207,17 @@ announce:
       {{- end }}
 
       📦 *{{ mdv2escape "Docker Image:" }}*
-      • [{{ mdv2escape "yed image" }}]({{ .Env.GITHUB_REPO_URL }}/pkgs/container/{{ .Env.REPO_NAME }}) `{{ mdv2escape .Version }}` / `latest`
+      • [{{ mdv2escape "yed" }}]({{ .Env.GITHUB_REPO_URL }}/pkgs/container/{{ .Env.REPO_NAME }}) `{{ mdv2escape .Version }}` / `latest`
 
       📥 *{{ mdv2escape "Binaries:" }}*
-      {{ mdv2escape "Signed binaries and checksums are available in the" }} [{{ mdv2escape "release assets" }}]({{ .ReleaseURL }})\.
+      {{ mdv2escape "Signed binaries and checksums available for Linux, macOS, and Windows (amd64 and arm64) in the" }} [{{ mdv2escape "release assets" }}]({{ .ReleaseURL }})\.
 
       🔗 *{{ mdv2escape "Links:" }}*
       • [{{ mdv2escape "View Full Release" }}]({{ .ReleaseURL }})
+      • [{{ mdv2escape "Changelog" }}]({{ .Env.GITHUB_REPO_URL }}/blob/{{ mdv2escape .Tag }}/CHANGELOG.md)
       • [{{ mdv2escape "Repository" }}]({{ .Env.GITHUB_REPO_URL }})
       {{- if .PreviousTag }}
       • [{{ mdv2escape "Compare Changes" }}]({{ .Env.GITHUB_REPO_URL }}/compare/{{ mdv2escape .PreviousTag }}...{{ mdv2escape .Tag }})
       {{- end }}
+
+    parse_mode: MarkdownV2
