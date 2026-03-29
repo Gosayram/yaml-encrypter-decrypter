@@ -21,7 +21,7 @@ $(OUTPUT_DIR):
 	@mkdir -p $(OUTPUT_DIR)
 
 # Default target
-.PHONY: default ci-test ci-lint ci-build ci-package ci-all release-snapshot tag push-tag release
+.PHONY: default ci-test ci-lint ci-build ci-package ci-all release-snapshot changelog tag push-tag release
 default: fmt vet lint staticcheck build quicktest check-config
 
 # Modern CI targets inspired by openkms pipeline style
@@ -46,6 +46,9 @@ ci-all: ci-lint ci-test ci-package
 release-snapshot:
 	@echo "Running GoReleaser snapshot build..."
 	@RELEASE_VERSION=$(VERSION) goreleaser release --snapshot --clean
+
+changelog:
+	@./hack/generate-changelog.sh
 
 tag:
 	@if [ ! -f $(VERSION_FILE) ]; then \
