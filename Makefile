@@ -307,7 +307,7 @@ install-staticcheck:
 # Run linter
 lint:
 	@echo "Running linter..."
-	@~/go/bin/golangci-lint run
+	@~/go/bin/golangci-lint run ./...
 
 # Run staticcheck tool
 .PHONY: staticcheck
@@ -397,7 +397,7 @@ check-all: lint staticcheck
 # Run linter with auto-fix
 lint-fix:
 	@echo "Running linter with auto-fix..."
-	@~/go/bin/golangci-lint run --fix
+	@~/go/bin/golangci-lint run --fix ./...
 
 # Build and run the application in a container
 .PHONY: build-image run-image
