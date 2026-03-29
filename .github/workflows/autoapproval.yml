@@ -1,13 +1,14 @@
 name: Autoapproval
 
 on:
-  pull_request:
-    types: [opened, reopened, labeled, edited]
+  pull_request_target:
+    types: [opened, reopened, synchronize, labeled, edited]
   pull_request_review:
     types: [dismissed]
 
 permissions:  # added using https://github.com/step-security/secure-repo
   contents: read
+  pull-requests: write
 
 jobs:
   autoapproval:
@@ -19,4 +20,5 @@ jobs:
     steps:
       - uses: dkhmelenko/autoapproval@a34fdae5ad67207842cf2909f9421817931247c0 # v1.0
         env:
-          GITHUB_TOKEN: ${{ secrets.MR_TOKEN }}
+          # Priority: dedicated token -> legacy token -> default workflow token.
+          GITHUB_TOKEN: ${{ secrets.AUTOAPPROVAL_TOKEN || secrets.MR_TOKEN || github.token }}
