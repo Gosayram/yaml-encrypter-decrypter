@@ -1,0 +1,193 @@
+version: 2
+
+project_name: yed
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+
+builds:
+  - id: yed
+    binary: yed
+    main: ./cmd/yaml-encrypter-decrypter
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -X 'main.Version={{ .Env.RELEASE_VERSION }}'
+      - -s
+      - -w
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: default
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - README.md
+      - LICENSE
+
+checksum:
+  name_template: "{{ .ProjectName }}_{{ .Version }}_checksums.txt"
+  algorithm: sha256
+
+signs:
+  - id: checksum
+    artifacts: checksum
+    signature: "${artifact}.sig"
+    cmd: gpg
+    args:
+      - "--batch"
+      - "--pinentry-mode=loopback"
+      - "--passphrase={{ .Env.GPG_PASSPHRASE }}"
+      - "--default-key={{ .Env.GPG_FINGERPRINT }}"
+      - "--output"
+      - "${signature}"
+      - "--detach-sign"
+      - "${artifact}"
+
+binary_signs:
+  - id: binaries
+    artifacts: binary
+    signature: "{{ .ArtifactName }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}.sig"
+    cmd: gpg
+    args:
+      - "--batch"
+      - "--pinentry-mode=loopback"
+      - "--passphrase={{ .Env.GPG_PASSPHRASE }}"
+      - "--default-key={{ .Env.GPG_FINGERPRINT }}"
+      - "--output"
+      - "${signature}"
+      - "--detach-sign"
+      - "${artifact}"
+
+release:
+  mode: replace
+  header: |
+    ## yed {{ .Tag }}
+
+    Release {{ .Tag }} of YAML Encrypter/Decrypter.
+
+    Commit format used in this release:
+    `[TYPE] - description;`
+
+    ### Docker Image
+
+    Docker image is available at GitHub Container Registry (ghcr.io):
+    - `ghcr.io/{{ .Env.DOCKER_REPO_PATH }}:{{ .Version }}`
+    - `ghcr.io/{{ .Env.DOCKER_REPO_PATH }}:latest`
+
+    ### Binaries (signed with GPG)
+
+    This release includes the `yed` binary for Linux, macOS and Windows (amd64/arm64), signed with GPG.
+
+    ### Verification
+
+    Verify checksums:
+
+    ```bash
+    sha256sum --check {{ .ProjectName }}_{{ .Version }}_checksums.txt
+    ```
+
+    Verify checksum signature:
+
+    ```bash
+    gpg --verify {{ .ProjectName }}_{{ .Version }}_checksums.txt.sig {{ .ProjectName }}_{{ .Version }}_checksums.txt
+    ```
+  footer: |
+    **Full Changelog**: {{ .Env.GITHUB_REPO_URL }}/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+changelog:
+  sort: asc
+  use: github
+  format: "{{ .SHA }}: {{ .Message }}{{ with .AuthorUsername }} (@{{ . }}){{ end }}"
+  filters:
+    exclude:
+      - "^Merge pull request"
+      - "^Merge branch"
+      - Merge pull request
+      - Merge remote-tracking branch
+      - Merge branch
+      - go mod tidy
+  groups:
+    - title: "INIT"
+      regexp: '^.*?\[INIT\]\s*-\s.*;\s*$'
+      order: 100
+    - title: "ADD"
+      regexp: '^.*?\[ADD\]\s*-\s.*;\s*$'
+      order: 110
+    - title: "FEATURE"
+      regexp: '^.*?\[FEATURE\]\s*-\s.*;\s*$'
+      order: 120
+    - title: "UPD"
+      regexp: '^.*?\[UPD\]\s*-\s.*;\s*$'
+      order: 150
+    - title: "FIX"
+      regexp: '^.*?\[FIX\]\s*-\s.*;\s*$'
+      order: 200
+    - title: "BUGFIX"
+      regexp: '^.*?\[BUGFIX\]\s*-\s.*;\s*$'
+      order: 210
+    - title: "REFACTOR"
+      regexp: '^.*?\[REFACTOR\]\s*-\s.*;\s*$'
+      order: 250
+    - title: "STYLE"
+      regexp: '^.*?\[STYLE\]\s*-\s.*;\s*$'
+      order: 300
+    - title: "LINT"
+      regexp: '^.*?\[LINT\]\s*-\s.*;\s*$'
+      order: 350
+    - title: "RULE"
+      regexp: '^.*?\[RULE\]\s*-\s.*;\s*$'
+      order: 380
+    - title: "DOCS"
+      regexp: '^.*?\[DOCS\]\s*-\s.*;\s*$'
+      order: 400
+    - title: "TEST"
+      regexp: '^.*?\[TEST\]\s*-\s.*;\s*$'
+      order: 450
+    - title: "CI"
+      regexp: '^.*?\[CI\]\s*-\s.*;\s*$'
+      order: 500
+    - title: "Other work"
+      order: 9999
+
+announce:
+  telegram:
+    enabled: true
+    chat_id: "{{ .Env.TELEGRAM_CHAT_ID }}"
+    parse_mode: MarkdownV2
+    message_template: |
+      🎉 *{{ mdv2escape .ProjectName }} {{ mdv2escape .Tag }}* {{ mdv2escape "is out!" }}
+
+      📋 *{{ mdv2escape "Release Information:" }}*
+      • {{ mdv2escape "Version:" }} `{{ mdv2escape .Version }}`
+      • {{ mdv2escape "Commit:" }} `{{ mdv2escape .ShortCommit }}`
+      • {{ mdv2escape "Date:" }} `{{ mdv2escape .Date }}`
+      {{- if .PreviousTag }}
+      • {{ mdv2escape "Previous:" }} `{{ mdv2escape .PreviousTag }}`
+      {{- end }}
+
+      📦 *{{ mdv2escape "Docker Image:" }}*
+      • [{{ mdv2escape "yed image" }}]({{ .Env.GITHUB_REPO_URL }}/pkgs/container/{{ .Env.REPO_NAME }}) `{{ mdv2escape .Version }}` / `latest`
+
+      📥 *{{ mdv2escape "Binaries:" }}*
+      {{ mdv2escape "Signed binaries and checksums are available in the" }} [{{ mdv2escape "release assets" }}]({{ .ReleaseURL }})\.
+
+      🔗 *{{ mdv2escape "Links:" }}*
+      • [{{ mdv2escape "View Full Release" }}]({{ .ReleaseURL }})
+      • [{{ mdv2escape "Repository" }}]({{ .Env.GITHUB_REPO_URL }})
+      {{- if .PreviousTag }}
+      • [{{ mdv2escape "Compare Changes" }}]({{ .Env.GITHUB_REPO_URL }}/compare/{{ mdv2escape .PreviousTag }}...{{ mdv2escape .Tag }})
+      {{- end }}

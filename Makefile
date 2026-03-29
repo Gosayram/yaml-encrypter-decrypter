@@ -2,15 +2,18 @@
 BINARY_NAME := yed
 OUTPUT_DIR := bin
 CMD_DIR := cmd/yaml-encrypter-decrypter
-TAG_NAME ?= $(shell head -n 1 .release-version 2>/dev/null || echo "v0.0.0")
-VERSION_RAW ?= $(shell tail -n 1 .release-version 2>/dev/null || echo "dev")
-VERSION ?= $(VERSION_RAW)
+VERSION_FILE := .release-version
+VERSION := $(shell if [ -f $(VERSION_FILE) ]; then head -n 1 $(VERSION_FILE) | tr -d '[:space:]'; else echo "v0.0.0"; fi)
+TAG_NAME ?= $(VERSION)
+COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+DATE := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+LDFLAGS := -X 'main.Version=$(VERSION)' -s -w
 GOOS ?= $(shell go env GOOS)
 GOARCH ?= $(shell go env GOARCH)
 GO_FILES := $(wildcard $(CMD_DIR)/*.go)
 
 # Tooling versions (pinned for reproducible CI/local checks)
-GOLANGCI_LINT_VERSION ?= v1.64.8
+GOLANGCI_LINT_VERSION ?= v2.11.4
 STATICCHECK_VERSION ?= v0.7.0
 
 # Ensure the output directory exists
@@ -18,8 +21,50 @@ $(OUTPUT_DIR):
 	@mkdir -p $(OUTPUT_DIR)
 
 # Default target
-.PHONY: default
+.PHONY: default ci-test ci-lint ci-build ci-package ci-all release-snapshot tag push-tag release
 default: fmt vet lint staticcheck build quicktest check-config
+
+# Modern CI targets inspired by openkms pipeline style
+ci-test:
+	@echo "Running CI tests (race + coverage)..."
+	go test -v -race -coverprofile=coverage.out ./...
+
+ci-lint: lint staticcheck
+	@echo "CI lint stage completed."
+
+ci-build: build-cross
+	@echo "CI build stage completed."
+
+ci-package: ci-build
+	@echo "Generating checksums for build artifacts..."
+	@shasum -a 256 $(OUTPUT_DIR)/* > checksums.txt
+	@echo "Checksums generated: checksums.txt"
+
+ci-all: ci-lint ci-test ci-package
+	@echo "All CI stages completed successfully."
+
+release-snapshot:
+	@echo "Running GoReleaser snapshot build..."
+	@RELEASE_VERSION=$(VERSION) goreleaser release --snapshot --clean
+
+tag:
+	@if [ ! -f $(VERSION_FILE) ]; then \
+		echo "Error: $(VERSION_FILE) not found"; \
+		exit 1; \
+	fi
+	@if git rev-parse "$(TAG_NAME)" >/dev/null 2>&1; then \
+		echo "Error: tag $(TAG_NAME) already exists"; \
+		exit 1; \
+	fi
+	git tag -a "$(TAG_NAME)" -m "Release $(TAG_NAME)"
+	@echo "Created tag $(TAG_NAME)"
+
+push-tag: tag
+	git push origin "$(TAG_NAME)"
+	@echo "Pushed tag $(TAG_NAME)"
+
+release: push-tag
+	@echo "Release $(TAG_NAME) created and pushed."
 
 # Build and run the application locally
 .PHONY: run
@@ -90,15 +135,15 @@ clean-deps:
 .PHONY: build
 build: $(OUTPUT_DIR)
 	@echo "Building $(BINARY_NAME) with version $(VERSION)..."
-	GOOS=$(GOOS) GOARCH=$(GOARCH) go build -ldflags="-X 'main.Version=$(VERSION)'" -o $(OUTPUT_DIR)/$(BINARY_NAME) ./$(CMD_DIR)
+	GOOS=$(GOOS) GOARCH=$(GOARCH) go build -ldflags="$(LDFLAGS)" -trimpath -o $(OUTPUT_DIR)/$(BINARY_NAME) ./$(CMD_DIR)
 
 # Build binaries for multiple platforms
 .PHONY: build-cross
 build-cross: $(OUTPUT_DIR)
 	@echo "Building cross-platform binaries..."
-	GOOS=linux   GOARCH=amd64   go build -ldflags="-X 'main.Version=$(VERSION)'" -o $(OUTPUT_DIR)/$(BINARY_NAME)-linux-amd64 ./$(CMD_DIR)
-	GOOS=darwin  GOARCH=arm64   go build -ldflags="-X 'main.Version=$(VERSION)'" -o $(OUTPUT_DIR)/$(BINARY_NAME)-darwin-arm64 ./$(CMD_DIR)
-	GOOS=windows GOARCH=amd64   go build -ldflags="-X 'main.Version=$(VERSION)'" -o $(OUTPUT_DIR)/$(BINARY_NAME)-windows-amd64.exe ./$(CMD_DIR)
+	GOOS=linux   GOARCH=amd64   go build -ldflags="$(LDFLAGS)" -trimpath -o $(OUTPUT_DIR)/$(BINARY_NAME)-linux-amd64 ./$(CMD_DIR)
+	GOOS=darwin  GOARCH=arm64   go build -ldflags="$(LDFLAGS)" -trimpath -o $(OUTPUT_DIR)/$(BINARY_NAME)-darwin-arm64 ./$(CMD_DIR)
+	GOOS=windows GOARCH=amd64   go build -ldflags="$(LDFLAGS)" -trimpath -o $(OUTPUT_DIR)/$(BINARY_NAME)-windows-amd64.exe ./$(CMD_DIR)
 	@echo "Cross-platform binaries are available in $(OUTPUT_DIR):"
 	@ls -1 $(OUTPUT_DIR)
 
@@ -248,7 +293,7 @@ vet:
 # Install golangci-lint
 install-lint:
 	@echo "Installing golangci-lint $(GOLANGCI_LINT_VERSION)..."
-	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	@go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 
 # Install staticcheck
 .PHONY: install-staticcheck
