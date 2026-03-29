@@ -1,6 +1,6 @@
 module github.com/atlet99/yaml-encrypter-decrypter
 
-go 1.24.12
+go 1.25.8
 
 require (
 	github.com/awnumar/memguard v0.22.5
