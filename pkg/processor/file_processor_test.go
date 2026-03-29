@@ -540,7 +540,7 @@ func TestFileProcessorProcessFile(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create temp dir: %v", err)
 		}
-		defer os.RemoveAll(tempDir)
+		defer func() { _ = os.RemoveAll(tempDir) }()
 
 		// Create test files
 		yamlFile := filepath.Join(tempDir, "encrypt_simple_yaml.yaml")
@@ -612,7 +612,7 @@ password: H7$kM4@nP9#vL2!qX5`
 			if err != nil {
 				t.Fatalf("Failed to create temp dir: %v", err)
 			}
-			defer os.RemoveAll(decryptDir)
+			defer func() { _ = os.RemoveAll(decryptDir) }()
 
 			// Create test files for decryption
 			decryptYamlFile := filepath.Join(decryptDir, "decrypt_simple_yaml.yaml")
@@ -705,7 +705,7 @@ password: H7$kM4@nP9#vL2!qX5`,
 			if err != nil {
 				t.Fatalf("Failed to create temp dir: %v", err)
 			}
-			defer os.RemoveAll(tempDir)
+			defer func() { _ = os.RemoveAll(tempDir) }()
 
 			// Create test files
 			yamlFile := filepath.Join(tempDir, tt.name+".yaml")
@@ -987,7 +987,7 @@ password: test123`,
 			if err != nil {
 				t.Fatalf("Failed to create temp dir: %v", err)
 			}
-			defer os.RemoveAll(tempDir)
+			defer func() { _ = os.RemoveAll(tempDir) }()
 
 			// Create test files
 			yamlFile := filepath.Join(tempDir, tt.name+".yaml")
@@ -1125,7 +1125,7 @@ func TestProcessYAMLWithExclusionsExtended(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to create temp dir: %v", err)
 			}
-			defer os.RemoveAll(tempDir)
+			defer func() { _ = os.RemoveAll(tempDir) }()
 
 			// Create test files
 			yamlFile := filepath.Join(tempDir, tt.name+".yaml")
@@ -1170,7 +1170,8 @@ func TestProcessYAMLWithExclusionsExtended(t *testing.T) {
 			}
 
 			// Verify exclusions were handled correctly
-			if tt.name == "encrypt_with_excludes" {
+			switch tt.name {
+			case "encrypt_with_excludes":
 				// First verify exclusions
 				if err := verifyExclusion(&node, "config.public_key"); err != nil {
 					t.Errorf("Exclusion verification failed: %v", err)
@@ -1185,7 +1186,7 @@ func TestProcessYAMLWithExclusionsExtended(t *testing.T) {
 				if err := verifyEncryption(&node, "config.api_key", tt.key); err != nil {
 					t.Errorf("Encryption verification failed for api_key: %v", err)
 				}
-			} else if tt.name == "process_mapping_with_exclusions" {
+			case "process_mapping_with_exclusions":
 				// First verify exclusions
 				if err := verifyExclusion(&node, "users.public.key"); err != nil {
 					t.Errorf("Exclusion verification failed: %v", err)
@@ -1298,7 +1299,7 @@ func TestProcessYAMLWithExclusions(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to create temp dir: %v", err)
 			}
-			defer os.RemoveAll(tempDir)
+			defer func() { _ = os.RemoveAll(tempDir) }()
 
 			// Create test files
 			yamlFile := filepath.Join(tempDir, tt.name+".yaml")

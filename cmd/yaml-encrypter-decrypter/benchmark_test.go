@@ -37,7 +37,7 @@ func TestOutputBenchmarkResults(t *testing.T) {
 
 	// Создаем временный файл для вывода
 	tempFile := "test_benchmark_results.md"
-	defer os.Remove(tempFile) // Удаляем файл после завершения теста
+	defer func() { _ = os.Remove(tempFile) }() // Удаляем файл после завершения теста
 
 	// Вызываем тестируемую функцию
 	err := outputBenchmarkResults(results, tempFile)

@@ -61,11 +61,12 @@ GTAXBgNVBAMMEHd3dy5leGFtcGxlLmNvbQ==
 		keyNode := certsNode.Content[i]
 		valueNode := certsNode.Content[i+1]
 
-		if keyNode.Value == "literal_style" {
+		switch keyNode.Value {
+		case "literal_style":
 			valueNode.Style = yaml.LiteralStyle // |
-		} else if keyNode.Value == "quoted_style" {
+		case "quoted_style":
 			valueNode.Style = yaml.DoubleQuotedStyle // "..."
-		} else if keyNode.Value == "nested" {
+		case "nested":
 			// Find the nested cert
 			nestedMapping := valueNode
 			for j := 0; j < len(nestedMapping.Content); j += 2 {

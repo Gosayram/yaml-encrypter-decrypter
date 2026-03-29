@@ -242,7 +242,7 @@ func outputBenchmarkResults(results []benchmarkResult, outputFile string) error 
 
 	// Add header
 	output.WriteString("# Benchmark Results\n\n")
-	output.WriteString(fmt.Sprintf("Generated on `%s`\n\n", time.Now().Format(time.RFC1123)))
+	fmt.Fprintf(&output, "Generated on `%s`\n\n", time.Now().Format(time.RFC1123))
 
 	// Group results by category
 	categories := make(map[string][]benchmarkResult)
@@ -252,14 +252,14 @@ func outputBenchmarkResults(results []benchmarkResult, outputFile string) error 
 
 	// Output each category
 	for category, categoryResults := range categories {
-		output.WriteString(fmt.Sprintf("## %s\n\n", category))
+		fmt.Fprintf(&output, "## %s\n\n", category)
 		output.WriteString("| Algorithm | Operations/sec | Time (ns/op) | Memory (B/op) | Allocs/op |\n")
 		output.WriteString("|-----------|----------------|--------------|---------------|----------|\n")
 
 		for _, r := range categoryResults {
 			opsPerSec := float64(NanosecondsPerSecond) / r.NsPerOp
-			output.WriteString(fmt.Sprintf("| %s | %.2f | %.2f | %d | %d |\n",
-				r.Name, opsPerSec, r.NsPerOp, r.BytesPerOp, r.AllocsPerOp))
+			fmt.Fprintf(&output, "| %s | %.2f | %.2f | %d | %d |\n",
+				r.Name, opsPerSec, r.NsPerOp, r.BytesPerOp, r.AllocsPerOp)
 		}
 
 		output.WriteString("\n")

@@ -436,7 +436,7 @@ func matchesRule(path string, rule Rule, debug bool) bool {
 		// Check if path is exactly a block or starts with a block
 		// For example, for block "axel.fix" path "axel.fix.username" should match
 		// Also check if block exactly matches the path, as in case of "axel.fix" and "axel.fix"
-		if !(path == rule.Block || strings.HasPrefix(path, rule.Block+".")) {
+		if path != rule.Block && !strings.HasPrefix(path, rule.Block+".") {
 			debugLog(debug, "Path '%s' does not start with or equal to block '%s'", path, rule.Block)
 			return false
 		}
@@ -798,7 +798,7 @@ func ProcessFile(filePath, key, operation string, debug bool, configPath string)
 	}
 
 	// Read file content
-	content, err := os.ReadFile(filePath)
+	content, err := os.ReadFile(filePath) // #nosec G304 -- file path is intentionally provided by the caller
 	if err != nil {
 		return fmt.Errorf("error reading file: %w", err)
 	}
@@ -823,7 +823,7 @@ func ProcessFile(filePath, key, operation string, debug bool, configPath string)
 
 	// Create a backup of the original file
 	backupPath := filePath + ".bak"
-	if err := os.WriteFile(backupPath, content, SecureFileMode); err != nil {
+	if err := os.WriteFile(backupPath, content, SecureFileMode); err != nil { // #nosec G703 -- backup path is derived from the selected input file
 		return fmt.Errorf("error creating backup file: %w", err)
 	}
 
@@ -993,7 +993,7 @@ func ShowDiff(filePath, key, operation string, debug bool, configPath string) er
 
 	debugLog(debug, "[ShowDiff] Using config path: %s", configPath)
 
-	content, err := os.ReadFile(filePath)
+	content, err := os.ReadFile(filePath) // #nosec G304 -- file path is intentionally provided by the caller
 	if err != nil {
 		return fmt.Errorf("error reading file: %w", err)
 	}
@@ -1017,12 +1017,16 @@ func ShowDiff(filePath, key, operation string, debug bool, configPath string) er
 }
 
 // readYAMLWithBuffer reads YAML file with buffering
-func readYAMLWithBuffer(filename string) (*yaml.Node, error) {
-	file, err := os.Open(filename)
+func readYAMLWithBuffer(filename string) (_ *yaml.Node, err error) {
+	file, err := os.Open(filename) // #nosec G304 -- filename is intentionally provided by internal call sites
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); err == nil && closeErr != nil {
+			err = closeErr
+		}
+	}()
 
 	// Create buffered reader
 	reader := bufio.NewReader(file)
@@ -1036,19 +1040,25 @@ func readYAMLWithBuffer(filename string) (*yaml.Node, error) {
 
 // writeYAMLWithBuffer writes YAML file with buffering
 func writeYAMLWithBuffer(filename string, data *yaml.Node) error {
-	file, err := os.Create(filename)
+	file, err := os.Create(filename) // #nosec G304 -- filename is intentionally provided by internal call sites
 	if err != nil {
 		return err
 	}
-	defer file.Close()
 
 	// Create buffered writer
 	writer := bufio.NewWriter(file)
-	defer writer.Flush()
 
 	encoder := yaml.NewEncoder(writer)
 	encoder.SetIndent(DefaultIndent)
-	return encoder.Encode(data)
+	if err := encoder.Encode(data); err != nil {
+		_ = file.Close()
+		return err
+	}
+	if err := writer.Flush(); err != nil {
+		_ = file.Close()
+		return err
+	}
+	return file.Close()
 }
 
 // clearNodeData recursively clears sensitive data from the node
@@ -1168,7 +1178,7 @@ func resolveConfigPath(configFile string, debug bool) string {
 // readAndParseConfig reads and parses a YAML config file
 func readAndParseConfig(configFile string, debug bool) (*Config, error) {
 	// Read config file
-	content, err := os.ReadFile(configFile)
+	content, err := os.ReadFile(configFile) // #nosec G304 -- config file path is intentionally provided by the caller
 	if err != nil {
 		return nil, fmt.Errorf("error reading config file: %w", err)
 	}
@@ -1354,7 +1364,7 @@ func loadRulesFromFile(filePath string, debug bool) ([]Rule, error) {
 	}
 
 	// Read and parse the file
-	content, err := os.ReadFile(filePath)
+	content, err := os.ReadFile(filePath) // #nosec G304 -- include file path comes from explicit include patterns
 	if err != nil {
 		return nil, fmt.Errorf("error reading file: %w", err)
 	}
@@ -1585,9 +1595,10 @@ func processScalarNode(node *yaml.Node, path string, key, operation string, rule
 	}
 
 	// Process node based on operation
-	if operation == OperationEncrypt {
+	switch operation {
+	case OperationEncrypt:
 		return encryptScalarNode(node, path, key, processedPaths, debug)
-	} else if operation == OperationDecrypt {
+	case OperationDecrypt:
 		return decryptScalarNode(node, path, key, processedPaths, debug)
 	}
 

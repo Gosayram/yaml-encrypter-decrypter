@@ -242,14 +242,14 @@ func BenchmarkProcessFile(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create config file: %v", err)
 	}
-	defer os.Remove(".yed_config.yml")
+	defer func() { _ = os.Remove(".yed_config.yml") }()
 
 	// Create temporary test file
 	tmpfile, err := os.CreateTemp("", "bench-*.yml")
 	if err != nil {
 		b.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpfile.Name())
+	defer func() { _ = os.Remove(tmpfile.Name()) }()
 
 	content := "password: secret123\napi_key: abc123"
 	if _, err := tmpfile.Write([]byte(content)); err != nil {
@@ -624,7 +624,7 @@ encryption:
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer os.Remove(tmpfile.Name())
+			defer func() { _ = os.Remove(tmpfile.Name()) }()
 
 			if _, err := tmpfile.Write([]byte(tt.config)); err != nil {
 				t.Fatal(err)
@@ -794,7 +794,7 @@ func TestFileOperations(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer os.Remove(tmpfile.Name())
+		defer func() { _ = os.Remove(tmpfile.Name()) }()
 
 		if _, err := tmpfile.Write(content); err != nil {
 			t.Fatal(err)
@@ -830,7 +830,7 @@ func TestFileOperations(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer os.Remove(tmpfile.Name())
+		defer func() { _ = os.Remove(tmpfile.Name()) }()
 
 		// Test writing
 		if err := writeYAMLWithBuffer(tmpfile.Name(), node); err != nil {
@@ -904,7 +904,7 @@ func TestDebugLog(t *testing.T) {
 
 	// Test with debug = true
 	debugLog(true, "test message %s", "value")
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	var buf bytes.Buffer
@@ -923,7 +923,7 @@ func TestDebugLog(t *testing.T) {
 
 	// Test with debug = false
 	debugLog(false, "test message %s", "value")
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	buf.Reset()
@@ -1219,7 +1219,7 @@ func TestParallelProcessing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	// Use a strong password that meets security requirements
 	strongPassword := "S9f&h27!Gp*3K5^LmZ#qR8@tUvWxYz"
@@ -1350,7 +1350,7 @@ func TestProcessFileWithRules(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to create temp dir: %v", err)
 			}
-			defer os.RemoveAll(tempDir)
+			defer func() { _ = os.RemoveAll(tempDir) }()
 
 			// Create test files
 			yamlFile := filepath.Join(tempDir, "test.yaml")
@@ -2544,15 +2544,15 @@ func TestPrintSequenceDiff(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create pipe: %v", err)
 	}
-	defer r.Close()
-	defer w.Close()
+	defer func() { _ = r.Close() }()
+	defer func() { _ = w.Close() }()
 	os.Stdout = w
 
 	// Call printSequenceDiff
 	printSequenceDiff(original, processed, true, false, "test.path")
 
 	// Restore stdout and get captured output
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 	var buf bytes.Buffer
 	if _, err := io.Copy(&buf, r); err != nil {
@@ -2577,11 +2577,11 @@ func TestPrintSequenceDiff(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create pipe: %v", err)
 	}
-	defer r.Close()
-	defer w.Close()
+	defer func() { _ = r.Close() }()
+	defer func() { _ = w.Close() }()
 	os.Stdout = w
 	printSequenceDiff(original, processed, true, true, "test.path")
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 	buf.Reset()
 	if _, err := io.Copy(&buf, r); err != nil {
@@ -2608,11 +2608,11 @@ func TestPrintSequenceDiff(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create pipe: %v", err)
 	}
-	defer r.Close()
-	defer w.Close()
+	defer func() { _ = r.Close() }()
+	defer func() { _ = w.Close() }()
 	os.Stdout = w
 	printSequenceDiff(shortOriginal, processed, true, false, "test.path")
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 }
 

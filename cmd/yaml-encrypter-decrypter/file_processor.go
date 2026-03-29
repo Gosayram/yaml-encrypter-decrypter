@@ -53,7 +53,7 @@ func processFileWithInterruptHandling(flags appFlags, keyBuffer *memguard.Locked
 
 // handleDryRun processes the file for dry-run mode
 func handleDryRun(filename string, keyBuffer *memguard.LockedBuffer, operation string, rules []processor.Rule, debug bool, configPath string) error {
-	content, err := os.ReadFile(filename)
+	content, err := os.ReadFile(filename) // #nosec G304 -- filename is an explicit user-provided CLI argument
 	if err != nil {
 		return fmt.Errorf("error reading file: %v", err)
 	}

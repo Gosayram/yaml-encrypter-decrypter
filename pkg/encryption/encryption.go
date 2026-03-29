@@ -416,7 +416,7 @@ func compress(data []byte) ([]byte, error) {
 	// Write data to the gzip writer
 	if _, err := gzw.Write(data); err != nil {
 		secureLog("[DEBUG:Compress] Failed to write data to gzip writer: %v\n", err)
-		gzw.Close()
+		_ = gzw.Close()
 		return nil, fmt.Errorf("failed to write to gzip writer: %w", err)
 	}
 
@@ -444,7 +444,7 @@ func decompress(compressedData []byte) ([]byte, error) {
 		secureLog("[DEBUG:Decompress] Failed to create gzip reader: %v\n", err)
 		return nil, fmt.Errorf("failed to create gzip reader: %w", err)
 	}
-	defer gzr.Close()
+	defer func() { _ = gzr.Close() }()
 
 	// Read the decompressed data
 	decompressed, err := io.ReadAll(gzr)

@@ -1099,7 +1099,7 @@ MzAxNTAwMDBa
 			// Expected value after decryption (with real newlines instead of escaped ones)
 			expectedContent := originalContent
 			if originalStyle == yaml.DoubleQuotedStyle {
-				expectedContent = strings.Replace(expectedContent, "\\n", "\n", -1)
+				expectedContent = strings.ReplaceAll(expectedContent, "\\n", "\n")
 			}
 
 			// Encrypt the value
@@ -1630,10 +1630,11 @@ func TestPreserveExactFormattingUpdated(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create test YAML content
 			yamlContent := fmt.Sprintf("content: %s", tt.content)
-			if tt.format == yaml.FoldedStyle {
+			switch tt.format {
+			case yaml.FoldedStyle:
 				// For folded style, we need special formatting
 				yamlContent = "content: >-\n  " + strings.ReplaceAll(tt.content, "\n", "\n  ")
-			} else if tt.format == yaml.LiteralStyle {
+			case yaml.LiteralStyle:
 				// For literal style, we need special formatting
 				yamlContent = "content: |\n  " + strings.ReplaceAll(tt.content, "\n", "\n  ")
 			}

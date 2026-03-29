@@ -313,7 +313,12 @@ lint:
 .PHONY: staticcheck
 staticcheck:
 	@echo "Running staticcheck..."
-	@~/go/bin/staticcheck ./...
+	@STATICCHECK_BIN="$$(go env GOPATH)/bin/staticcheck"; \
+	if [ ! -x "$$STATICCHECK_BIN" ]; then \
+		echo "staticcheck not found, installing $(STATICCHECK_VERSION)..."; \
+		go install honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSION); \
+	fi; \
+	"$$STATICCHECK_BIN" ./...
 	@echo "Staticcheck passed!"
 
 # Check rule configurations by validating against config files

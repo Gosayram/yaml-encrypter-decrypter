@@ -268,7 +268,8 @@ func ProcessMultilineNode(node *yaml.Node, path string, key, operation string, d
 	}
 
 	// Only process nodes that need encryption/decryption
-	if operation == OperationEncrypt {
+	switch operation {
+	case OperationEncrypt:
 		// For encryption, only encrypt the node if it's not already encrypted
 		if !strings.HasPrefix(node.Value, AES) {
 			// Encrypt the node
@@ -277,7 +278,7 @@ func ProcessMultilineNode(node *yaml.Node, path string, key, operation string, d
 			}
 			return true, nil
 		}
-	} else if operation == OperationDecrypt {
+	case OperationDecrypt:
 		// For decryption, only decrypt if the node has the AES prefix
 		if strings.HasPrefix(node.Value, AES) {
 			// Create a decryption function that uses the key
