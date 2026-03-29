@@ -616,6 +616,23 @@ encryption:
 			wantRules: nil,
 			wantError: true,
 		},
+		{
+			name: "invalid rule with validate_rules disabled",
+			config: `
+encryption:
+  validate_rules: false
+  rules:
+    - name: "Missing required fields"
+      action: "encrypt"
+`,
+			wantRules: []Rule{
+				{
+					Name:   "Missing required fields",
+					Action: "encrypt",
+				},
+			},
+			wantError: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -1569,11 +1586,11 @@ password: supersecret
 					Rules         []Rule   `yaml:"rules"`
 					UnsecureDiff  bool     `yaml:"unsecure_diff"`
 					IncludeRules  []string `yaml:"include_rules,omitempty"`
-					ValidateRules bool     `yaml:"validate_rules,omitempty"`
+					ValidateRules *bool    `yaml:"validate_rules,omitempty"`
 				}{
 					UnsecureDiff:  false,
 					IncludeRules:  []string{},
-					ValidateRules: true,
+					ValidateRules: func() *bool { b := true; return &b }(),
 					Rules: []Rule{
 						{
 							Name:    "test_rule",
@@ -1601,10 +1618,10 @@ password: supersecret
 					Rules         []Rule   `yaml:"rules"`
 					UnsecureDiff  bool     `yaml:"unsecure_diff"`
 					IncludeRules  []string `yaml:"include_rules,omitempty"`
-					ValidateRules bool     `yaml:"validate_rules,omitempty"`
+					ValidateRules *bool    `yaml:"validate_rules,omitempty"`
 				}{
 					IncludeRules:  []string{},
-					ValidateRules: true,
+					ValidateRules: func() *bool { b := true; return &b }(),
 					Rules: []Rule{
 						{
 							Name:    "test_rule",

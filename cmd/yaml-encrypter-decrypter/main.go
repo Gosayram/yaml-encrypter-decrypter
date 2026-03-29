@@ -123,7 +123,8 @@ func mainWithExitCode() int {
 		// Create a temporary YAML file with the include_rules section
 		tempConfig := processor.Config{}
 		tempConfig.Encryption.IncludeRules = additionalRules
-		tempConfig.Encryption.ValidateRules = true
+		validateRules := true
+		tempConfig.Encryption.ValidateRules = &validateRules
 
 		// Try to load the additional rule files
 		additionalRulesLoaded, _, err := processor.LoadAdditionalRules(&tempConfig, filepath.Dir(configFilePath), flags.debug)
@@ -195,7 +196,8 @@ func validateConfiguration(configPath string, debug bool, includeRulePatterns st
 		// Create a temporary YAML file with the include_rules section
 		tempConfig := processor.Config{}
 		tempConfig.Encryption.IncludeRules = additionalRules
-		tempConfig.Encryption.ValidateRules = true
+		validateRules := true
+		tempConfig.Encryption.ValidateRules = &validateRules
 
 		// Try to load the additional rule files
 		additionalRulesLoaded, _, err := processor.LoadAdditionalRules(&tempConfig, filepath.Dir(configPath), debug)

@@ -31,6 +31,11 @@ func TestValidatePasswordStrength(t *testing.T) {
 			password: "password123456789",
 			wantErr:  true,
 		},
+		{
+			name:     "long passphrase without character diversity still allowed",
+			password: "correcthorsebatterystaple",
+			wantErr:  false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -40,6 +45,13 @@ func TestValidatePasswordStrength(t *testing.T) {
 				t.Errorf("ValidatePasswordStrength() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestValidatePasswordStrength_NoCharacterClassRequirement(t *testing.T) {
+	password := "correcthorsebatterystaple"
+	if err := ValidatePasswordStrength(password); err != nil {
+		t.Fatalf("expected long passphrase without forced char classes to be valid, got error: %v", err)
 	}
 }
 

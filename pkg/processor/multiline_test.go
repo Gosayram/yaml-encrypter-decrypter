@@ -1064,12 +1064,10 @@ MzAxNTAwMDBa
 			style:   yaml.LiteralStyle,
 			content: certContent,
 		},
-		// Folded style is not supported, so we expect an error
 		{
-			name:      "PEM certificate with folded style",
-			style:     yaml.FoldedStyle,
-			content:   certContent,
-			expectErr: true,
+			name:    "PEM certificate with folded style",
+			style:   yaml.FoldedStyle,
+			content: certContent,
 		},
 		{
 			name:    "PEM certificate with double-quoted style (escaped newlines)",
@@ -1107,15 +1105,6 @@ MzAxNTAwMDBa
 
 			// Check if the expected error occurred
 			if tt.expectErr {
-				// If we expect an error, check that the style and content didn't change
-				if err == nil && tt.style == yaml.FoldedStyle {
-					// For folded style, the library doesn't return an error, but it doesn't encrypt either
-					if strings.HasPrefix(node.Value, AES) {
-						t.Errorf("Folded style should not be encrypted but was: %s", node.Value)
-					}
-					return
-				}
-
 				if err == nil {
 					t.Errorf("Expected error for style %v but got none", tt.style)
 				}
@@ -1136,6 +1125,8 @@ MzAxNTAwMDBa
 			switch originalStyle {
 			case yaml.LiteralStyle:
 				expectedSuffix = LiteralStyleSuffix
+			case yaml.FoldedStyle:
+				expectedSuffix = FoldedStyleSuffix
 			case yaml.DoubleQuotedStyle:
 				expectedSuffix = DoubleQuotedStyleSuffix
 			case yaml.SingleQuotedStyle:
@@ -1177,6 +1168,42 @@ MzAxNTAwMDBa
 					originalStyle, node.Style)
 			}
 		})
+	}
+}
+
+func TestFoldedStyleRoundTripIsEncrypted(t *testing.T) {
+	testKey := "S9f&h27!Gp*3K5^LmZ#qR8@tUvWxYz"
+	original := "first line\nsecond line\nthird line"
+
+	node := &yaml.Node{
+		Kind:  yaml.ScalarNode,
+		Style: yaml.FoldedStyle,
+		Value: original,
+	}
+
+	if err := EncryptMultiline(node, testKey, false); err != nil {
+		t.Fatalf("EncryptMultiline() error = %v", err)
+	}
+
+	if !strings.HasPrefix(node.Value, AES) {
+		t.Fatalf("expected folded node to be encrypted, got: %s", node.Value)
+	}
+	if !strings.HasSuffix(node.Value, FoldedStyleSuffix) {
+		t.Fatalf("expected folded style suffix, got: %s", node.Value)
+	}
+
+	if err := DecryptMultiline(node, func(value string) (string, error) {
+		valueToDecrypt := strings.TrimPrefix(value, AES)
+		return encryption.DecryptToString(valueToDecrypt, testKey)
+	}); err != nil {
+		t.Fatalf("DecryptMultiline() error = %v", err)
+	}
+
+	if node.Value != original {
+		t.Fatalf("decrypted value mismatch: got %q want %q", node.Value, original)
+	}
+	if node.Style != yaml.FoldedStyle {
+		t.Fatalf("expected folded style restored, got %v", node.Style)
 	}
 }
 

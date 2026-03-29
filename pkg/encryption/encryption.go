@@ -59,6 +59,8 @@ const (
 	Argon2idIndicator     byte = 0x01
 	PBKDF2SHA256Indicator byte = 0x02
 	PBKDF2SHA512Indicator byte = 0x03
+	legacyArgon2Indicator byte = 'a'
+	legacyPBKDF2Indicator byte = 'p'
 
 	// Constants for secure logging
 	secureLogPrefix = "****"
@@ -153,6 +155,11 @@ func Encrypt(password, plaintext string, algorithm ...KeyDerivationAlgorithm) (s
 		secureLog("[DEBUG:Encrypt] Using default algorithm: '%s'\n", algo)
 	}
 
+	indicator, err := algorithmToIndicator(algo)
+	if err != nil {
+		return "", err
+	}
+
 	// Check for style suffixes
 	styleSuffix := ""
 	for _, suffix := range []string{"|", ">"} {
@@ -229,14 +236,14 @@ func Encrypt(password, plaintext string, algorithm ...KeyDerivationAlgorithm) (s
 
 	// Combine all components
 	result := make([]byte, 0, 1+len(salt)+len(nonce)+len(ciphertext))
-	result = append(result, byte(algo[0]))
+	result = append(result, indicator)
 	result = append(result, salt...)
 	result = append(result, nonce...)
 	result = append(result, ciphertext...)
 
 	// Calculate HMAC for all data up to this point
 	secureLog("[DEBUG:Encrypt] Calculating HMAC\n")
-	hmacValue := computeHMAC(key, result, byte(algo[0]))
+	hmacValue := computeHMAC(key, result, indicator)
 	secureLog("[DEBUG:Encrypt] HMAC calculated\n")
 
 	// Add HMAC to the result
@@ -273,16 +280,6 @@ func Decrypt(password, ciphertext string, algorithm ...KeyDerivationAlgorithm) (
 		return "", errors.New("ciphertext cannot be empty")
 	}
 
-	// Set default algorithm if not provided
-	var algo KeyDerivationAlgorithm
-	if len(algorithm) > 0 && algorithm[0] != "" {
-		algo = algorithm[0]
-		secureLog("[DEBUG:Decrypt] Using provided algorithm: '%s'\n", algo)
-	} else {
-		algo = DefaultKeyDerivationAlgorithm
-		secureLog("[DEBUG:Decrypt] Using default algorithm: '%s'\n", algo)
-	}
-
 	// Decode base64 ciphertext
 	secureLog("[DEBUG:Decrypt] Decoding base64 input\n")
 	decoded, err := base64.StdEncoding.DecodeString(ciphertext)
@@ -303,73 +300,27 @@ func Decrypt(password, ciphertext string, algorithm ...KeyDerivationAlgorithm) (
 	nonce := decoded[1+saltSize : 1+saltSize+nonceSize]
 	encryptedData := decoded[1+saltSize+nonceSize : len(decoded)-hmacSize]
 	hmacValue := decoded[len(decoded)-hmacSize:]
+	hmacData := decoded[:len(decoded)-hmacSize]
 
 	secureLog("[DEBUG:Decrypt] Components extracted\n")
 
-	// Derive key
-	secureLog("[DEBUG:Decrypt] Deriving key using algorithm: %s\n", algo)
-	key, err := deriveKey(password, salt, algo)
+	candidates, err := resolveDecryptionAlgorithms(algorithmByte, algorithm...)
 	if err != nil {
-		secureLog("[DEBUG:Decrypt] Key derivation failed: %v\n", err)
-		return "", fmt.Errorf("failed to derive key: %w", err)
-	}
-	secureLog("[DEBUG:Decrypt] Key derived successfully\n")
-
-	// Create secure buffer for key
-	keyBuf := memguard.NewBufferFromBytes(key)
-	if keyBuf == nil {
-		secureLog("[DEBUG:Decrypt] Failed to create secure buffer for key\n")
-		return "", fmt.Errorf("failed to create secure buffer for key")
-	}
-	defer keyBuf.Destroy()
-	secureLog("[DEBUG:Decrypt] Created secure key buffer\n")
-
-	// Verify HMAC
-	secureLog("[DEBUG:Decrypt] Verifying HMAC\n")
-	hmacData := decoded[:len(decoded)-hmacSize]
-	expectedHMAC := computeHMAC(key, hmacData, algorithmByte)
-	if !hmac.Equal(expectedHMAC, hmacValue) {
-		secureLog("[DEBUG:Decrypt] HMAC verification failed!\n")
-		return "", errors.New("cipher: message authentication failed")
-	}
-	secureLog("[DEBUG:Decrypt] HMAC verified successfully\n")
-
-	// Create cipher
-	secureLog("[DEBUG:Decrypt] Creating AES cipher\n")
-	block, err := aes.NewCipher(keyBuf.Bytes())
-	if err != nil {
-		secureLog("[DEBUG:Decrypt] Failed to create cipher: %v\n", err)
-		return "", fmt.Errorf("failed to create cipher: %w", err)
+		return "", err
 	}
 
-	// Create GCM
-	aesgcm, err := cipher.NewGCM(block)
-	if err != nil {
-		secureLog("[DEBUG:Decrypt] Failed to create GCM: %v\n", err)
-		return "", fmt.Errorf("failed to create GCM: %w", err)
+	for _, algo := range candidates {
+		decrypted, decryptErr := decryptWithAlgorithm(password, algo, algorithmByte, salt, nonce, encryptedData, hmacData, hmacValue)
+		if decryptErr == nil {
+			return decrypted, nil
+		}
+		if !errors.Is(decryptErr, errAuthenticationFailed) {
+			return "", decryptErr
+		}
 	}
-	secureLog("[DEBUG:Decrypt] AES-GCM cipher created successfully\n")
 
-	// Decrypt data
-	secureLog("[DEBUG:Decrypt] Decrypting data\n")
-	decryptedData, err := aesgcm.Open(nil, nonce, encryptedData, nil)
-	if err != nil {
-		secureLog("[DEBUG:Decrypt] Decryption failed: %v\n", err)
-		return "", fmt.Errorf("failed to decrypt data: %w", err)
-	}
-	secureLog("[DEBUG:Decrypt] Decryption completed\n")
-
-	// Decompress data
-	secureLog("[DEBUG:Decrypt] Decompressing data\n")
-	decompressedData, err := decompress(decryptedData)
-	if err != nil {
-		secureLog("[DEBUG:Decrypt] Decompression failed: %v\n", err)
-		return "", fmt.Errorf("failed to decompress data: %w", err)
-	}
-	secureLog("[DEBUG:Decrypt] Decompression completed\n")
-	secureLog("[DEBUG:Decrypt] Decryption completed successfully\n")
-
-	return string(decompressedData), nil
+	secureLog("[DEBUG:Decrypt] All candidate algorithms failed HMAC verification\n")
+	return "", errAuthenticationFailed
 }
 
 // DecryptToString decrypts a base64-encoded ciphertext string and returns the plaintext as a string.
@@ -502,6 +453,84 @@ func computeHMAC(key, data []byte, algorithm ...byte) []byte {
 	secureLog("[DEBUG:HMAC] HMAC calculation complete\n")
 
 	return result
+}
+
+var errAuthenticationFailed = errors.New("cipher: message authentication failed")
+
+func decryptWithAlgorithm(password string, algo KeyDerivationAlgorithm, algorithmByte byte, salt, nonce, encryptedData, hmacData, hmacValue []byte) (string, error) {
+	secureLog("[DEBUG:Decrypt] Trying algorithm: %s\n", algo)
+
+	key, err := deriveKey(password, salt, algo)
+	if err != nil {
+		return "", fmt.Errorf("failed to derive key: %w", err)
+	}
+	defer memguard.WipeBytes(key)
+
+	keyBuf := memguard.NewBufferFromBytes(key)
+	if keyBuf == nil {
+		return "", fmt.Errorf("failed to create secure buffer for key")
+	}
+	defer keyBuf.Destroy()
+
+	expectedHMAC := computeHMAC(key, hmacData, algorithmByte)
+	if !hmac.Equal(expectedHMAC, hmacValue) {
+		return "", errAuthenticationFailed
+	}
+
+	block, err := aes.NewCipher(keyBuf.Bytes())
+	if err != nil {
+		return "", fmt.Errorf("failed to create cipher: %w", err)
+	}
+
+	aesgcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", fmt.Errorf("failed to create GCM: %w", err)
+	}
+
+	decryptedData, err := aesgcm.Open(nil, nonce, encryptedData, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to decrypt data: %w", err)
+	}
+
+	decompressedData, err := decompress(decryptedData)
+	if err != nil {
+		return "", fmt.Errorf("failed to decompress data: %w", err)
+	}
+
+	return string(decompressedData), nil
+}
+
+func resolveDecryptionAlgorithms(algorithmByte byte, explicit ...KeyDerivationAlgorithm) ([]KeyDerivationAlgorithm, error) {
+	if len(explicit) > 0 && explicit[0] != "" {
+		return []KeyDerivationAlgorithm{explicit[0]}, nil
+	}
+
+	switch algorithmByte {
+	case Argon2idIndicator, legacyArgon2Indicator:
+		return []KeyDerivationAlgorithm{Argon2idAlgorithm}, nil
+	case PBKDF2SHA256Indicator:
+		return []KeyDerivationAlgorithm{PBKDF2SHA256Algorithm}, nil
+	case PBKDF2SHA512Indicator:
+		return []KeyDerivationAlgorithm{PBKDF2SHA512Algorithm}, nil
+	case legacyPBKDF2Indicator:
+		// Legacy format could not distinguish PBKDF2 variants; try both.
+		return []KeyDerivationAlgorithm{PBKDF2SHA256Algorithm, PBKDF2SHA512Algorithm}, nil
+	default:
+		return nil, fmt.Errorf("invalid ciphertext: unknown algorithm indicator 0x%x", algorithmByte)
+	}
+}
+
+func algorithmToIndicator(algo KeyDerivationAlgorithm) (byte, error) {
+	switch algo {
+	case Argon2idAlgorithm:
+		return Argon2idIndicator, nil
+	case PBKDF2SHA256Algorithm:
+		return PBKDF2SHA256Indicator, nil
+	case PBKDF2SHA512Algorithm:
+		return PBKDF2SHA512Indicator, nil
+	default:
+		return 0, fmt.Errorf("unsupported key derivation algorithm: %s", algo)
+	}
 }
 
 // deriveKey derives a 32-byte key from the given password and salt using the specified algorithm.

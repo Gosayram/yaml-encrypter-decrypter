@@ -92,7 +92,7 @@ func parseFlags() appFlags {
 		// Print flags in organized groups
 		fmt.Fprintln(os.Stderr, "Required Options:")
 		fmt.Fprintln(os.Stderr, "  -file, -f 		<string>	Path to the YAML file to process")
-		fmt.Fprintln(os.Stderr, "  -key, -k		  <string>		Encryption/decryption key (min 16 chars)")
+		fmt.Fprintln(os.Stderr, "  -key, -k		  <string>		Encryption/decryption key (min 15 chars)")
 		fmt.Fprintln(os.Stderr, "  -operation, -o 	<string>	Operation to perform (encrypt/decrypt)")
 		fmt.Fprintln(os.Stderr, "")
 

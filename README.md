@@ -856,7 +856,7 @@ This is an open source project under the [MIT](https://github.com/atlet99/yaml-e
 You can override command-line flags using environment variables:
 
 ```bash
-# Set encryption key (must be at least 16 characters long)
+# Set encryption key (must be at least 15 characters long)
 export YED_ENCRYPTION_KEY="my-super-secure-key"
 
 # Then run without specifying key on command line
@@ -870,25 +870,25 @@ The environment variable approach provides an alternative to passing sensitive d
 This tool preserves YAML formatting during encryption and decryption operations:
 
 - Literal style (`|`) is fully supported and preserved
-- Folded style (`>` or `>-`) is preserved using a special handling mechanism
+- Folded style (`>` or `>-`) is encrypted/decrypted and preserved
 - Double-quoted and single-quoted values maintain their original style
 - Plain scalars remain plain after decryption
 
 ### Folded Style Support
 
-YAML folded style (`>` or `>-`) is specially handled to maintain its formatting. The tool:
+YAML folded style (`>` or `>-`) is handled directly in node processing. The tool:
 
-1. Identifies folded style sections in the YAML document
-2. Temporarily replaces them with placeholders during processing
-3. Restores the original formatting after encryption/decryption
+1. Encrypts/decrypts folded scalar content like other multiline values
+2. Persists the original style metadata together with encrypted payload
+3. Restores folded style after decryption
 
-This approach ensures that folded style sections are not corrupted during encryption/decryption operations.
+This approach preserves folded formatting while still applying cryptographic processing.
 
 ## Security Considerations
 
 - Passwords should be at least 15 characters long
 - Strong passwords should include uppercase, lowercase, numbers, and special characters
-- Only the Argon2id algorithm is fully supported for production use
+- Argon2id, PBKDF2-SHA256 and PBKDF2-SHA512 are supported; algorithm is auto-detected during decryption
 - Protected memory is used for encryption keys but not for all data
 
 ### **Testing and Development**

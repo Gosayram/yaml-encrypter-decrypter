@@ -127,12 +127,6 @@ func EncryptMultiline(node *yaml.Node, key string, debug bool) error {
 		return nil
 	}
 
-	// Skip encryption for folded style (>) - it's not supported
-	if node.Style == yaml.FoldedStyle {
-		debugLog(debug, "WARNING: YAML folded style (> or >-) is not supported for encryption. Please use literal style (|) instead.")
-		return nil
-	}
-
 	// Store the original style and tag
 	originalStyle := node.Style
 	originalTag := node.Tag
@@ -157,6 +151,8 @@ func EncryptMultiline(node *yaml.Node, key string, debug bool) error {
 	switch originalStyle {
 	case yaml.LiteralStyle:
 		styleSuffix = LiteralStyleSuffix
+	case yaml.FoldedStyle:
+		styleSuffix = FoldedStyleSuffix
 	case yaml.DoubleQuotedStyle:
 		styleSuffix = DoubleQuotedStyleSuffix
 	case yaml.SingleQuotedStyle:
@@ -183,11 +179,6 @@ func EncryptMultiline(node *yaml.Node, key string, debug bool) error {
 // DecryptMultiline decrypts a multiline scalar node and restores its original style
 func DecryptMultiline(node *yaml.Node, decryptFn func(string) (string, error)) error {
 	if node == nil || node.Kind != yaml.ScalarNode {
-		return nil
-	}
-
-	// Skip decryption for folded style (>) - it's not supported
-	if node.Style == yaml.FoldedStyle {
 		return nil
 	}
 
@@ -258,14 +249,6 @@ func ProcessMultilineNode(node *yaml.Node, path string, key, operation string, d
 	}
 
 	debugLog(debug, "Processing node at path %s with style %v", path, node.Style)
-
-	// Skip folded style nodes completely
-	if node.Style == yaml.FoldedStyle {
-		debugLog(debug, "WARNING: YAML folded style (> or >-) at path %s is not supported for encryption/decryption. Please use literal style (|) instead.", path)
-		// Make sure we preserve the folded style
-		node.Style = yaml.FoldedStyle
-		return false, nil
-	}
 
 	// Only process nodes that need encryption/decryption
 	switch operation {

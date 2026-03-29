@@ -82,86 +82,31 @@ func (e *PasswordStrengthError) Error() string {
 
 // ValidatePasswordStrength checks if a password meets strength requirements
 func ValidatePasswordStrength(password string) error {
-	fmt.Printf("[DEBUG] Validating password strength\n")
-
 	var problems []string
 
 	// Check for Cyrillic characters
 	if containsCyrillic(password) {
-		fmt.Printf("[DEBUG] Password contains Cyrillic characters\n")
 		problems = append(problems, "Password must not contain Cyrillic characters")
 	}
 
 	// Check password length
 	if len(password) < PasswordMinLength {
-		fmt.Printf("[DEBUG] Password too short\n")
 		problems = append(problems, fmt.Sprintf("Password must be at least %d characters long", PasswordMinLength))
 	}
 
 	if len(password) > PasswordMaxLength {
-		fmt.Printf("[DEBUG] Password too long\n")
 		problems = append(problems, fmt.Sprintf("Password must not exceed %d characters", PasswordMaxLength))
-	}
-
-	// Check for allowed special characters
-	var hasAllowedSpecial bool
-	for _, char := range password {
-		if strings.ContainsRune(AllowedSpecialChars, char) {
-			hasAllowedSpecial = true
-			break
-		}
-	}
-	if !hasAllowedSpecial {
-		fmt.Printf("[DEBUG] Password missing special characters\n")
-		problems = append(problems, fmt.Sprintf("Password must contain at least one special character from: %s", AllowedSpecialChars))
-	}
-
-	// Check for character types
-	var hasUpper, hasLower, hasDigit bool
-	for _, char := range password {
-		switch {
-		case unicode.IsUpper(char):
-			hasUpper = true
-		case unicode.IsLower(char):
-			hasLower = true
-		case unicode.IsDigit(char):
-			hasDigit = true
-		}
-	}
-
-	if !hasUpper {
-		fmt.Printf("[DEBUG] Password missing uppercase letters\n")
-		problems = append(problems, "Password must contain at least one uppercase letter")
-	}
-
-	if !hasLower {
-		fmt.Printf("[DEBUG] Password missing lowercase letters\n")
-		problems = append(problems, "Password must contain at least one lowercase letter")
-	}
-
-	if !hasDigit {
-		fmt.Printf("[DEBUG] Password missing digits\n")
-		problems = append(problems, "Password must contain at least one digit")
-	}
-
-	// Check for character sequences
-	if hasCharacterSequence(password) {
-		fmt.Printf("[DEBUG] Password contains character sequences\n")
-		problems = append(problems, "Password must not contain character sequences (e.g., abc, 123)")
 	}
 
 	// Check if it's a common password
 	if isCommonPassword(password) {
-		fmt.Printf("[DEBUG] Password is too common\n")
 		problems = append(problems, "Password is too common and easily guessable")
 	}
 
 	strength := calculatePasswordStrength(password)
-	fmt.Printf("[DEBUG] Password strength: %s\n", strength)
 
 	// If we found problems, return them
 	if len(problems) > 0 {
-		fmt.Printf("[DEBUG] Password validation failed with %d problems\n", len(problems))
 		return &PasswordStrengthError{
 			Message:   "Password does not meet strength requirements",
 			Problems:  problems,
@@ -171,8 +116,6 @@ func ValidatePasswordStrength(password string) error {
 			MaxLength: PasswordMaxLength,
 		}
 	}
-
-	fmt.Printf("[DEBUG] Password validation successful\n")
 	return nil
 }
 
@@ -180,22 +123,6 @@ func ValidatePasswordStrength(password string) error {
 func containsCyrillic(s string) bool {
 	for _, r := range s {
 		if (r >= 'а' && r <= 'я') || (r >= 'А' && r <= 'Я') || r == 'ё' || r == 'Ё' {
-			return true
-		}
-	}
-	return false
-}
-
-// hasCharacterSequence checks if the password contains character sequences
-func hasCharacterSequence(password string) bool {
-	// Check for sequences of 3 or more consecutive characters
-	for i := 0; i < len(password)-2; i++ {
-		// Check for ascending sequences (e.g., abc, 123)
-		if password[i]+1 == password[i+1] && password[i+1]+1 == password[i+2] {
-			return true
-		}
-		// Check for descending sequences (e.g., cba, 321)
-		if password[i]-1 == password[i+1] && password[i+1]-1 == password[i+2] {
 			return true
 		}
 	}

@@ -208,6 +208,20 @@ const (
 // CurrentKeyDerivationAlgorithm is the algorithm to use for encryption
 var CurrentKeyDerivationAlgorithm encryption.KeyDerivationAlgorithm
 
+func init() {
+	CurrentKeyDerivationAlgorithm = encryption.DefaultKeyDerivationAlgorithm
+}
+
+// SetKeyDerivationAlgorithm sets the processor encryption algorithm.
+func SetKeyDerivationAlgorithm(algorithm encryption.KeyDerivationAlgorithm) error {
+	if _, err := encryption.ValidateAlgorithm(string(algorithm)); err != nil {
+		return err
+	}
+	CurrentKeyDerivationAlgorithm = algorithm
+	encryption.SetDefaultAlgorithm(algorithm)
+	return nil
+}
+
 type Rule struct {
 	Name        string `yaml:"name"`
 	Block       string `yaml:"block"`   // Block to which the rule applies (e.g., "smart_config" or "*")
@@ -223,7 +237,7 @@ type Config struct {
 		Rules         []Rule   `yaml:"rules"`
 		UnsecureDiff  bool     `yaml:"unsecure_diff"`
 		IncludeRules  []string `yaml:"include_rules,omitempty"`  // Paths to additional rule files
-		ValidateRules bool     `yaml:"validate_rules,omitempty"` // Whether to validate rules (default: true)
+		ValidateRules *bool    `yaml:"validate_rules,omitempty"` // Whether to validate rules (default: true)
 	} `yaml:"encryption"`
 	Key          string
 	Operation    string
@@ -292,7 +306,7 @@ func debugLog(debug bool, format string, args ...interface{}) {
 				// Check for encryption keys or passwords
 				if strings.Contains(strings.ToLower(format), "password") ||
 					strings.Contains(strings.ToLower(format), "key") ||
-					strings.Contains(strArg, "YED_ENCRYPT_PASSWORD") ||
+					strings.Contains(strArg, "YED_ENCRYPTION_KEY") ||
 					strings.Contains(strings.ToLower(format), "length") ||
 					strings.Contains(strings.ToLower(format), "size") ||
 					strings.Contains(strings.ToLower(format), "compressed") ||
@@ -318,7 +332,7 @@ func maskEncryptedValue(value string, debug bool, fieldPath ...string) string {
 		if len(value) > MinEncryptedLength &&
 			(strings.Contains(strings.ToLower(value), "password") ||
 				strings.Contains(strings.ToLower(value), "key") ||
-				strings.Contains(value, "YED_ENCRYPT_PASSWORD")) {
+				strings.Contains(value, "YED_ENCRYPTION_KEY")) {
 			return MaskedValue
 		}
 		return value
@@ -673,20 +687,6 @@ func processScalarNodeWithExclusions(node *yaml.Node, path string, key, operatio
 		return nil
 	}
 
-	// Skip folded style nodes for encryption/decryption
-	if node.Style == yaml.FoldedStyle {
-		debugLog(debug, "WARNING: YAML folded style (> or >-) at path %s is not supported for encryption/decryption. Please use literal style (|) instead.", path)
-		// Explicitly preserve the folded style by marking the node as processed
-		processedPaths[path] = true
-		// Ensure the style remains folded style
-		node.Style = yaml.FoldedStyle
-		// Set proper tag for folded style content
-		if node.Tag == "" || node.Tag == YAMLTagStr {
-			node.Tag = YAMLTagStr
-		}
-		return nil
-	}
-
 	// Mark as processed
 	processedPaths[path] = true
 
@@ -803,9 +803,6 @@ func ProcessFile(filePath, key, operation string, debug bool, configPath string)
 		return fmt.Errorf("error reading file: %w", err)
 	}
 
-	// First, identify and protect folded style sections
-	foldedStyleSections, protectedContent := protectFoldedStyleSections(content, debug)
-
 	// Load rules from config file
 	rules, _, err := loadRules(configPath, debug)
 	if err != nil {
@@ -816,7 +813,7 @@ func ProcessFile(filePath, key, operation string, debug bool, configPath string)
 	processedPaths := make(map[string]bool)
 
 	// Process YAML content
-	node, err := processYAMLContent(protectedContent, key, operation, rules, processedPaths, debug)
+	node, err := processYAMLContent(content, key, operation, rules, processedPaths, debug)
 	if err != nil {
 		return fmt.Errorf("error processing YAML content: %w", err)
 	}
@@ -835,13 +832,8 @@ func ProcessFile(filePath, key, operation string, debug bool, configPath string)
 		return fmt.Errorf("error encoding YAML: %w", err)
 	}
 
-	processedContent := buf.Bytes()
-
-	// Restore the folded style sections in the processed content
-	finalContent := restoreFoldedStyleSections(processedContent, foldedStyleSections, debug)
-
 	// Write the processed content back to the file
-	if err := os.WriteFile(filePath, finalContent, SecureFileMode); err != nil {
+	if err := os.WriteFile(filePath, buf.Bytes(), SecureFileMode); err != nil {
 		return fmt.Errorf("error writing file: %w", err)
 	}
 
@@ -1121,11 +1113,6 @@ func loadRules(configFile string, debug bool) ([]Rule, *Config, error) {
 	// Initialize rules slice with main config rules
 	allRules := config.Encryption.Rules
 
-	// Set default value for ValidateRules if not specified
-	if !config.Encryption.ValidateRules {
-		config.Encryption.ValidateRules = true // Default to true
-	}
-
 	// Process included rules
 	includedRules, err := processIncludedRules(config, configFile, debug)
 	if err != nil {
@@ -1225,7 +1212,7 @@ func processIncludedRules(config *Config, configFile string, debug bool) ([]Rule
 // validateRules validates the loaded rules
 func validateRules(config *Config, debug bool) error {
 	// Skip validation if disabled or no rules
-	if !config.Encryption.ValidateRules || len(config.Encryption.Rules) == 0 {
+	if !isRuleValidationEnabled(config) || len(config.Encryption.Rules) == 0 {
 		return nil
 	}
 
@@ -1252,6 +1239,13 @@ func validateRules(config *Config, debug bool) error {
 	}
 
 	return nil
+}
+
+func isRuleValidationEnabled(config *Config) bool {
+	if config == nil || config.Encryption.ValidateRules == nil {
+		return true
+	}
+	return *config.Encryption.ValidateRules
 }
 
 // logUnsecureDiffSetting logs a warning if unsecure_diff is enabled
@@ -1938,7 +1932,7 @@ var unsecureDiffLog bool = false // Global variable to store unsecureDiff value
 func isSensitiveValue(value string) bool {
 	// Always consider highly sensitive passwords and encryption keys
 	if strings.Contains(strings.ToLower(value), "password") ||
-		strings.Contains(value, "YED_ENCRYPT_PASSWORD") {
+		strings.Contains(value, "YED_ENCRYPTION_KEY") {
 		return true
 	}
 
@@ -2374,18 +2368,16 @@ func ProcessDiff(content []byte, config Config) error {
 		return fmt.Errorf("error parsing original YAML: %w", err)
 	}
 
-	// Create a deep copy for encryption
-	encryptedData := deepCopyNode(&originalData)
-
-	// Process the encrypted copy
+	// Process content with the same pipeline used by file processing.
 	processedPaths := make(map[string]bool)
-	if _, err := processYAMLContent(content, config.Key, OperationEncrypt, config.Encryption.Rules, processedPaths, config.Debug); err != nil {
+	processedNode, err := processYAMLContent(content, config.Key, OperationEncrypt, config.Encryption.Rules, processedPaths, config.Debug)
+	if err != nil {
 		return fmt.Errorf("error processing YAML content: %w", err)
 	}
 
 	// Output differences
 	debugLog(config.Debug, "Printing differences")
-	printDiff(originalData.Content[0], encryptedData.Content[0], config.Debug, config.Encryption.UnsecureDiff, "")
+	printDiff(originalData.Content[0], processedNode.Content[0], config.Debug, config.Encryption.UnsecureDiff, "")
 	debugLog(config.Debug, "Finished showDiff")
 
 	return nil

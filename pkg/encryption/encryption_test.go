@@ -229,8 +229,7 @@ func TestDecryptWithCorruptedData(t *testing.T) {
 }
 
 func TestIndividualAlgorithms(t *testing.T) {
-	// This test focuses on testing each key derivation algorithm individually
-	// Currently only Argon2id is fully supported, other algorithms are skipped
+	// This test verifies round-trip encryption/decryption for every supported KDF.
 	data := "test data for individual algorithms"
 	password := "P@ssw0rd_Str0ng!T3st#2024"
 
@@ -238,32 +237,23 @@ func TestIndividualAlgorithms(t *testing.T) {
 	tests := []struct {
 		name      string
 		algorithm KeyDerivationAlgorithm
-		skip      bool
 	}{
 		{
 			name:      "Argon2id",
 			algorithm: Argon2idAlgorithm,
-			skip:      false,
 		},
 		{
 			name:      "PBKDF2-SHA256",
 			algorithm: PBKDF2SHA256Algorithm,
-			skip:      true, // Skip known failing test - HMAC validation issues with this algorithm
 		},
 		{
 			name:      "PBKDF2-SHA512",
 			algorithm: PBKDF2SHA512Algorithm,
-			skip:      true, // Skip known failing test - HMAC validation issues with this algorithm
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.skip {
-				t.Skip("Skipping test for algorithm with known issues")
-				return
-			}
-
 			// Encrypt with specific algorithm
 			encrypted, err := Encrypt(password, data, tt.algorithm)
 			if err != nil {
@@ -281,6 +271,37 @@ func TestIndividualAlgorithms(t *testing.T) {
 				t.Errorf("Decrypt() with %s = %v, want %v", tt.algorithm, decrypted, data)
 			} else {
 				t.Logf("Successfully encrypted and decrypted with %s algorithm", tt.algorithm)
+			}
+		})
+	}
+}
+
+func TestDecryptAutoDetectAlgorithm(t *testing.T) {
+	password := "P@ssw0rd_Str0ng!T3st#2024"
+	data := "algorithm auto-detection payload"
+
+	tests := []struct {
+		name      string
+		algorithm KeyDerivationAlgorithm
+	}{
+		{name: "argon2id", algorithm: Argon2idAlgorithm},
+		{name: "pbkdf2-sha256", algorithm: PBKDF2SHA256Algorithm},
+		{name: "pbkdf2-sha512", algorithm: PBKDF2SHA512Algorithm},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			encrypted, err := Encrypt(password, data, tt.algorithm)
+			if err != nil {
+				t.Fatalf("Encrypt() error = %v", err)
+			}
+
+			decrypted, err := Decrypt(password, encrypted)
+			if err != nil {
+				t.Fatalf("Decrypt() error = %v", err)
+			}
+			if decrypted != data {
+				t.Fatalf("Decrypt() = %q, want %q", decrypted, data)
 			}
 		})
 	}

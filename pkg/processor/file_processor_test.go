@@ -470,8 +470,8 @@ func TestSensitiveValueDetection(t *testing.T) {
 			expectedSensitive: true,
 		},
 		{
-			name:              "YED_ENCRYPT_PASSWORD is always sensitive",
-			value:             "YED_ENCRYPT_PASSWORD=123",
+			name:              "YED_ENCRYPTION_KEY is always sensitive",
+			value:             "YED_ENCRYPTION_KEY=123",
 			unsecureDiff:      true,
 			expectedSensitive: true,
 		},
@@ -508,7 +508,7 @@ func TestSensitiveValueDetection(t *testing.T) {
 
 			// Implement the detection logic directly
 			var result bool
-			if strings.Contains(tt.value, "password") || strings.Contains(tt.value, "YED_ENCRYPT_PASSWORD") {
+			if strings.Contains(tt.value, "password") || strings.Contains(tt.value, "YED_ENCRYPTION_KEY") {
 				result = true
 			} else if strings.HasPrefix(tt.value, "AES256:") {
 				result = false // Encrypted values are not sensitive
