@@ -1,27 +1,15 @@
+version: "2"
+
 run:
   timeout: 5m
   tests: true
-
-issues:
-  exclude-dirs:
-    - vendor/
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - mnd
-        - gosec
-        - gocritic
-        - goconst
-        - gocognit
-        - gocyclo
+  issues-exit-code: 1
 
 linters:
   enable:
-    - gofmt
     - govet
     - errcheck
     - staticcheck
-    - gosimple
     - ineffassign
     - unused
     - misspell
@@ -31,8 +19,31 @@ linters:
     - goconst
     - gocognit
     - mnd
+  settings:
+    mnd:
+      ignored-numbers: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+  exclusions:
+    generated: lax
+    rules:
+      - path: _test\.go
+        linters:
+          - mnd
+          - gosec
+          - gocritic
+          - goconst
+          - gocognit
+          - gocyclo
+    paths:
+      - vendor
 
-linters-settings:
-  mnd:
-    ignore-numbers: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
- 
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+formatters:
+  enable:
+    - gofmt
+  exclusions:
+    generated: lax
+    paths:
+      - vendor

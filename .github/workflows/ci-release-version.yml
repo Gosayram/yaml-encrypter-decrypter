@@ -1,17 +1,21 @@
-name: Update Release Version
+name: Version Automation
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+  workflow_dispatch:
 
-# Set minimal permissions for the entire workflow
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: release-version-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  update-release-version:
-    name: Update .release-version with tag and build ID
+  update_release_version:
+    name: Update .release-version
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
@@ -26,11 +30,9 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.CONTENT_RELEASE }}
 
-      - name: Determine next tag
+      - name: Determine next tag and update file
         run: |
-          latest_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.1.0")
-          echo "Latest tag: $latest_tag"
-
+          latest_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
           IFS='.' read -r major minor patch <<< "${latest_tag#v}"
           patch=$((patch + 1))
           if [ "$patch" -ge 10 ]; then
@@ -42,39 +44,51 @@ jobs:
             major=$((major + 1))
           fi
           new_tag="v$major.$minor.$patch"
-          echo "New tag: $new_tag"
+
           echo "$new_tag" > .release-version
           echo "$new_tag (build ${{ github.run_id }})" >> .release-version
 
-      - name: Commit and push .release-version
+      - name: Commit .release-version
         run: |
-          git config --local user.name "github-actions[bot]"
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .release-version
-          git commit -m "Update .release-version with version and build ID"
-
-          # set remote url to use token directly
-          REPO_URL="https://x-access-token:${{ secrets.CONTENT_RELEASE }}@github.com/${{ github.repository }}.git"
-          git remote set-url origin "${REPO_URL}"
+          git commit -m "chore(release): update .release-version" || exit 0
           git push origin HEAD:main
 
-      - name: Create and push new tag
+      - name: Create and push tag
         run: |
           new_tag=$(head -n 1 .release-version)
-          git tag $new_tag
-          REPO_URL="https://x-access-token:${{ secrets.CONTENT_RELEASE }}@github.com/${{ github.repository }}.git"
-          git remote set-url origin "${REPO_URL}"
-          git push origin $new_tag
-        env:
-          GITHUB_TOKEN: ${{ secrets.CONTENT_RELEASE }}
+          if git rev-parse "$new_tag" >/dev/null 2>&1; then
+            echo "Tag $new_tag already exists, skipping"
+            exit 0
+          fi
+          git tag "$new_tag"
+          git push origin "$new_tag"
 
-      - name: Trigger Release Workflow
+  notify:
+    name: Telegram Notify
+    runs-on: ubuntu-latest
+    needs: [update_release_version]
+    if: always() && secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != ''
+    steps:
+      - name: Send telegram notification
         env:
-          WORKFLOW_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          JOB_RESULT: ${{ needs.update_release_version.result }}
         run: |
-          curl -X POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer $WORKFLOW_TOKEN" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/repos/${{ github.repository }}/actions/workflows/ci.yml/dispatches \
-            -d '{"ref":"main"}'
+          if [ "$JOB_RESULT" = "success" ]; then
+            ICON="✅"
+            STATE="SUCCESS"
+          else
+            ICON="❌"
+            STATE="FAILED"
+          fi
+
+          MSG="$ICON *Version Automation*: $STATE%0ARepository: \`${{ github.repository }}\`%0ABranch: \`${{ github.ref_name }}\`%0ARun: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d parse_mode="Markdown" \
+            -d text="${MSG}"

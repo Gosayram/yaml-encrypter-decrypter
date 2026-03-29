@@ -1,23 +1,24 @@
-name: ci-security-scanner-checks
+name: CI Security Gate
 
 on:
   push:
-    branches:
-      - main
+    branches: [main, dev]
   pull_request:
-    types:
-      - opened
-      - reopened
-      - synchronize
-      - ready_for_review
-    branches:
-      - main
+    branches: [main, dev]
   schedule:
-    - cron: "0 0 * * *"
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-security-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   trivy_scan:
-    name: trivy-scans
+    name: Trivy Filesystem Scan
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -30,32 +31,28 @@ jobs:
           disable-sudo: true
           egress-policy: audit
 
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
-      - name: Run Trivy vulnerability scanner
+      - name: Run Trivy
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
         with:
-          scan-type: 'fs'
-          scan-ref: '.'
-          format: 'sarif'
-          severity: 'CRITICAL,HIGH'
-          output: 'trivy-results.sarif'
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          severity: CRITICAL,HIGH
+          output: trivy-results.sarif
 
-      - name: Upload Trivy scan results to GitHub Security tab
+      - name: Upload Trivy SARIF
         uses: github/codeql-action/upload-sarif@0e9f55954318745b37b7933c693bc093f7336125 # v4.35.1
         with:
-          sarif_file: 'trivy-results.sarif'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          sarif_file: trivy-results.sarif
 
-  nancy_check:
-    name: nancy-check
+  govulncheck:
+    name: Go Vulnerability Check
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
-      actions: read
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594 # v2.16.0
@@ -63,31 +60,23 @@ jobs:
           disable-sudo: true
           egress-policy: audit
 
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-
-      - name: Get Go Version
-        run: |
-          #!/bin/bash
-          GOVERSION=$({ [ -f .go-version ] && cat .go-version; })
-          echo "GOVERSION=$GOVERSION" >> $GITHUB_ENV
 
       - name: Setup Go
         uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
         with:
-          go-version: ${{ env.GOVERSION }}
+          go-version-file: .go-version
 
-      - name: WriteGoList
-        run: go list -json -m all > go.list
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
 
-      - name: Nancy
-        uses: sonatype-nexus-community/nancy-github-action@db2d2964a4e753f3b08f5d8558da3e77c500800c # v1.0.3
-        with:
-          nancyVersion: "v1.0.48"
-          nancyCommand: sleuth --loud
+      - name: Run govulncheck
+        run: |
+          "$(go env GOPATH)/bin/govulncheck" ./...
 
-  ossf_scan:
-    name: openssf-scorecard
+  scorecard:
+    name: OSSF Scorecard
     runs-on: ubuntu-latest
     permissions:
       security-events: write
@@ -100,24 +89,52 @@ jobs:
           disable-sudo: true
           egress-policy: audit
 
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Run analysis
         uses: ossf/scorecard-action@99c09fe975337306107572b4fdf4db224cf8e2f2 # v2.4.3
         with:
-          results_file: 'ossf-results.sarif'
+          results_file: ossf-results.sarif
           results_format: sarif
           publish_results: true
 
       - name: Upload artifact
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          name: 'OSSF Sarif file'
-          path: 'ossf-results.sarif'
+          name: ossf-scorecard-sarif
+          path: ossf-results.sarif
           retention-days: 5
 
-      - name: Upload result to GitHub Code Scanning
+      - name: Upload SARIF to code scanning
         uses: github/codeql-action/upload-sarif@0e9f55954318745b37b7933c693bc093f7336125 # v4.35.1
         with:
-          sarif_file: 'ossf-results.sarif'
+          sarif_file: ossf-results.sarif
+
+  notify:
+    name: Telegram Notify
+    runs-on: ubuntu-latest
+    needs: [trivy_scan, govulncheck, scorecard]
+    if: always() && secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != ''
+    steps:
+      - name: Send telegram notification
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TRIVY_RESULT: ${{ needs.trivy_scan.result }}
+          GOVULN_RESULT: ${{ needs.govulncheck.result }}
+          SCORECARD_RESULT: ${{ needs.scorecard.result }}
+        run: |
+          STATE="SUCCESS"
+          ICON="✅"
+          if [ "$TRIVY_RESULT" != "success" ] || [ "$GOVULN_RESULT" != "success" ] || [ "$SCORECARD_RESULT" != "success" ]; then
+            STATE="FAILED"
+            ICON="❌"
+          fi
+
+          MSG="$ICON *CI Security Gate*: $STATE%0ARepository: \`${{ github.repository }}\`%0ARef: \`${{ github.ref_name }}\`%0ARun: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d parse_mode="Markdown" \
+            -d text="${MSG}"
