@@ -5,7 +5,7 @@ on:
     types: [opened, reopened, labeled, edited]
   pull_request_review:
     types: [dismissed]
-    
+
 permissions:  # added using https://github.com/step-security/secure-repo
   contents: read
 
@@ -17,6 +17,6 @@ jobs:
     runs-on: ubuntu-latest
     name: Autoapproval
     steps:
-      - uses: dkhmelenko/autoapproval@76e6fa8313951249b9477a855f0d09ad6510b696 # v1.0
+      - uses: dkhmelenko/autoapproval@a34fdae5ad67207842cf2909f9421817931247c0 # v1.0
         env:
           GITHUB_TOKEN: ${{ secrets.MR_TOKEN }}

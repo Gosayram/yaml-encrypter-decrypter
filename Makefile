@@ -9,6 +9,10 @@ GOOS ?= $(shell go env GOOS)
 GOARCH ?= $(shell go env GOARCH)
 GO_FILES := $(wildcard $(CMD_DIR)/*.go)
 
+# Tooling versions (pinned for reproducible CI/local checks)
+GOLANGCI_LINT_VERSION ?= v1.64.8
+STATICCHECK_VERSION ?= v0.7.0
+
 # Ensure the output directory exists
 $(OUTPUT_DIR):
 	@mkdir -p $(OUTPUT_DIR)
@@ -243,14 +247,14 @@ vet:
 
 # Install golangci-lint
 install-lint:
-	@echo "Installing golangci-lint..."
-	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	@echo "Installing golangci-lint $(GOLANGCI_LINT_VERSION)..."
+	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 
 # Install staticcheck
 .PHONY: install-staticcheck
 install-staticcheck:
-	@echo "Installing staticcheck..."
-	@go install honnef.co/go/tools/cmd/staticcheck@latest
+	@echo "Installing staticcheck $(STATICCHECK_VERSION)..."
+	@go install honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSION)
 
 # Run linter
 lint:
