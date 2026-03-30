@@ -15,6 +15,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/awnumar/memguard"
 	"golang.org/x/crypto/argon2"
@@ -83,6 +84,7 @@ var (
 var (
 	debugMode                     bool                   = false
 	DefaultKeyDerivationAlgorithm KeyDerivationAlgorithm = Argon2idAlgorithm
+	defaultAlgorithmMu            sync.RWMutex
 )
 
 // init initializes encryption parameters and checks the debug flag
@@ -151,7 +153,7 @@ func Encrypt(password, plaintext string, algorithm ...KeyDerivationAlgorithm) (s
 		algo = algorithm[0]
 		secureLog("[DEBUG:Encrypt] Using provided algorithm: '%s'\n", algo)
 	} else {
-		algo = DefaultKeyDerivationAlgorithm
+		algo = getDefaultAlgorithm()
 		secureLog("[DEBUG:Encrypt] Using default algorithm: '%s'\n", algo)
 	}
 
@@ -410,7 +412,15 @@ func decompress(compressedData []byte) ([]byte, error) {
 
 // SetDefaultAlgorithm sets the default key derivation algorithm
 func SetDefaultAlgorithm(algorithm KeyDerivationAlgorithm) {
+	defaultAlgorithmMu.Lock()
+	defer defaultAlgorithmMu.Unlock()
 	DefaultKeyDerivationAlgorithm = algorithm
+}
+
+func getDefaultAlgorithm() KeyDerivationAlgorithm {
+	defaultAlgorithmMu.RLock()
+	defer defaultAlgorithmMu.RUnlock()
+	return DefaultKeyDerivationAlgorithm
 }
 
 // GetAvailableKeyDerivationAlgorithms returns the list of available key derivation algorithms

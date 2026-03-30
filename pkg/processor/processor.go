@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -205,19 +206,11 @@ const (
 	firstRuleOffset = 5
 )
 
-// CurrentKeyDerivationAlgorithm is the algorithm to use for encryption
-var CurrentKeyDerivationAlgorithm encryption.KeyDerivationAlgorithm
-
-func init() {
-	CurrentKeyDerivationAlgorithm = encryption.DefaultKeyDerivationAlgorithm
-}
-
 // SetKeyDerivationAlgorithm sets the processor encryption algorithm.
 func SetKeyDerivationAlgorithm(algorithm encryption.KeyDerivationAlgorithm) error {
 	if _, err := encryption.ValidateAlgorithm(string(algorithm)); err != nil {
 		return err
 	}
-	CurrentKeyDerivationAlgorithm = algorithm
 	encryption.SetDefaultAlgorithm(algorithm)
 	return nil
 }
@@ -743,7 +736,7 @@ func processScalarNodeStandard(node *yaml.Node, path string, operation string, k
 		styleSuffix := getStyleSuffix(node.Style)
 
 		// Encrypt the value
-		encrypted, err := encryption.Encrypt(key, node.Value, CurrentKeyDerivationAlgorithm)
+		encrypted, err := encryption.Encrypt(key, node.Value)
 		if err != nil {
 			return fmt.Errorf("failed to encrypt value at path %s: %w", path, err)
 		}
@@ -1124,8 +1117,7 @@ func loadRules(configFile string, debug bool) ([]Rule, *Config, error) {
 
 	// Check if we found any rules at all
 	if len(allRules) == 0 {
-		debugLog(debug, "No rules found in main config or included files")
-		fmt.Println("Warning: No rules found in configuration. No encryption/decryption will be performed.")
+		debugLog(debug, "Warning: no rules found in main config or included files")
 	} else {
 		debugLog(debug, "Loaded a total of %d rules", len(allRules))
 	}
@@ -1653,7 +1645,7 @@ func encryptScalarNode(node *yaml.Node, path string, key string, processedPaths 
 
 	// Encrypt the value
 	debugLog(debug, "Encrypting value at path %s", path)
-	encryptedValue, err := encryption.Encrypt(key, node.Value, CurrentKeyDerivationAlgorithm)
+	encryptedValue, err := encryption.Encrypt(key, node.Value)
 	if err != nil {
 		return fmt.Errorf("error encrypting value at path %s: %v", path, err)
 	}
@@ -1816,7 +1808,6 @@ func showDiff(data *yaml.Node, key, operation string, unsecureDiff bool, debug b
 
 	if len(rules) == 0 {
 		debugLog(debug, "No rules defined, no encryption will be performed")
-		fmt.Println("No rules defined in configuration, no encryption will be performed.")
 		return
 	}
 
@@ -1928,6 +1919,28 @@ func processScalarNodeForDiff(node *yaml.Node, key, operation string, isOriginal
 // We consider sensitive all strings that are not AES256 labels and longer than 6 characters
 // If unsecureDiff == true, then we don't consider values as sensitive, except for passwords
 var unsecureDiffLog bool = false // Global variable to store unsecureDiff value
+
+var (
+	diffOutputMu sync.RWMutex
+	diffOutput   io.Writer
+)
+
+// SetDiffOutput configures where diff output is written.
+// Passing nil resets output destination to os.Stdout.
+func SetDiffOutput(w io.Writer) {
+	diffOutputMu.Lock()
+	defer diffOutputMu.Unlock()
+	diffOutput = w
+}
+
+func getDiffOutput() io.Writer {
+	diffOutputMu.RLock()
+	defer diffOutputMu.RUnlock()
+	if diffOutput == nil {
+		return os.Stdout
+	}
+	return diffOutput
+}
 
 func isSensitiveValue(value string) bool {
 	// Always consider highly sensitive passwords and encryption keys
@@ -2053,7 +2066,7 @@ func printScalarDiff(original, processed *yaml.Node, debug bool, unsecureDiff bo
 	}
 
 	// Show the difference
-	fmt.Printf("%s:\n  [%d] - %s\n  [%d] + %s\n", path, original.Line, originalValue, processed.Line, processedValue)
+	_, _ = fmt.Fprintf(getDiffOutput(), "%s:\n  [%d] - %s\n  [%d] + %s\n", path, original.Line, originalValue, processed.Line, processedValue)
 }
 
 // markExcludedPaths marks paths that should be excluded based on rules

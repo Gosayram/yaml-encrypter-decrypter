@@ -8,7 +8,7 @@ import (
 // ValidateAlgorithm validates the algorithm string and returns the corresponding KeyDerivationAlgorithm
 func ValidateAlgorithm(algorithm string) (KeyDerivationAlgorithm, error) {
 	if algorithm == "" {
-		return DefaultKeyDerivationAlgorithm, nil
+		return getDefaultAlgorithm(), nil
 	}
 
 	switch strings.ToLower(algorithm) {

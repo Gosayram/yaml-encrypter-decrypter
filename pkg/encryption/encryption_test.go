@@ -6,7 +6,6 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
-	"fmt"
 	"strings"
 	"testing"
 )
@@ -89,7 +88,6 @@ func TestDecryptWithWrongPassword(t *testing.T) {
 		data          string
 		expectError   bool
 		errorContains string
-		skipTest      bool // Added to skip tests with known validation issues
 	}{
 		{
 			name:          "completely different password",
@@ -113,27 +111,20 @@ func TestDecryptWithWrongPassword(t *testing.T) {
 			decryptKey:    "",
 			data:          "This is a test string.",
 			expectError:   true,
-			errorContains: "must be at least 15 characters long",
-			skipTest:      true, // Skip this test as it fails at validation stage before reaching decryption
+			errorContains: "Password does not meet strength requirements",
 		},
 		{
 			name:          "invalid password - fails validation",
 			encryptKey:    "P@ssw0rd_Str0ng!T3st#2024",
-			decryptKey:    "Wr0ngP@ssword_Test#1234", // This password will fail validation
+			decryptKey:    "password123456789", // Explicitly common password to force validation error
 			data:          "This is a test string.",
 			expectError:   true,
 			errorContains: "Password does not meet strength requirements",
-			skipTest:      true, // Skip since we know it fails validation before reaching decryption
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.skipTest {
-				t.Skip("Skipping test with known validation issues")
-				return
-			}
-
 			// Encrypt using the encryption key
 			encrypted, err := Encrypt(tt.encryptKey, tt.data)
 			if err != nil {
@@ -343,40 +334,29 @@ func TestEncryptDecryptWithArgon2id(t *testing.T) {
 }
 
 func TestPasswordValidation(t *testing.T) {
-	// This test checks password validation under different scenarios
-	// We skip tests with known validation issues and focus on a truly strong password
 	tests := []struct {
 		name     string
 		password string
 		wantErr  bool
 		errMsg   string
-		skipTest bool
 	}{
 		{
 			name:     "empty password",
 			password: "",
 			wantErr:  true,
-			errMsg:   "must be at least 15 characters long",
-			skipTest: true, // Skip as this will always fail basic length validation
+			errMsg:   "Password does not meet strength requirements",
 		},
 		{
 			name:     "too short password",
 			password: "weak",
 			wantErr:  true,
-			errMsg:   "must be at least 15 characters long",
-			skipTest: true, // Skip as this will always fail basic length validation
+			errMsg:   "Password does not meet strength requirements",
 		},
 		{
-			name:     "medium strength password",
-			password: "Password12345678!",
-			wantErr:  true, // The password validator might reject this password
-			skipTest: true, // Skip as validation rules might be strict
-		},
-		{
-			name:     "high strength password",
-			password: "P@ssw0rd12345678!",
-			wantErr:  true, // The password validator might reject this password
-			skipTest: true, // Skip as validation rules might be strict
+			name:     "common password",
+			password: "password123456789",
+			wantErr:  true,
+			errMsg:   "Password does not meet strength requirements",
 		},
 		{
 			name:     "actual strong password",
@@ -387,11 +367,6 @@ func TestPasswordValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.skipTest {
-				t.Skip("Skipping this test case as it depends on specific password validation rules")
-				return
-			}
-
 			err := ValidatePasswordStrength(tt.password)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ValidatePasswordStrength() error = %v, wantErr %v", err, tt.wantErr)
@@ -433,22 +408,22 @@ func TestBackwardCompatibility(t *testing.T) {
 		t.Fatalf("Failed to decode base64: %v", err)
 	}
 
-	fmt.Printf("[TEST DEBUG] Original encrypted data length: %d bytes\n", len(rawData))
+	t.Logf("Original encrypted data length: %d bytes", len(rawData))
 
 	// Create old format, excluding algorithm indicator
 	legacyData := rawData[AlgorithmIndicatorLength:]
 	legacyEncrypted := base64.StdEncoding.EncodeToString(legacyData)
 
-	fmt.Printf("[TEST DEBUG] Legacy format created: %d bytes (original minus %d bytes for algorithm indicator)\n",
+	t.Logf("Legacy format created: %d bytes (original minus %d bytes for algorithm indicator)",
 		len(legacyData), AlgorithmIndicatorLength)
-	fmt.Printf("[TEST DEBUG] Legacy format base64: %s\n", legacyEncrypted[:min(50, len(legacyEncrypted))])
+	t.Logf("Legacy format base64: %s", legacyEncrypted[:min(50, len(legacyEncrypted))])
 
 	// 4. Should get an error when decrypting legacy format without algorithm indicator
 	_, err = Decrypt(password, legacyEncrypted)
 	if err == nil {
 		t.Error("Expected error when decrypting legacy format, but got none")
 	} else {
-		fmt.Printf("[TEST DEBUG] Got expected error: %v\n", err)
+		t.Logf("Got expected error: %v", err)
 	}
 }
 

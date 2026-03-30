@@ -37,7 +37,12 @@ func main() {
 
 func mainWithExitCode() int {
 	// Parse command line arguments
-	flags := parseFlags()
+	flags, err := parseFlags()
+	if err != nil {
+		log.Println(err)
+		flag.Usage()
+		return 1
+	}
 
 	// Show version if requested
 	if flags.showVersion {

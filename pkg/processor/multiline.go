@@ -242,7 +242,8 @@ func IsMultilineContent(content string) bool {
 	return strings.Contains(content, "\n")
 }
 
-// ProcessMultilineNode processes a scalar node for encryption or decryption
+// ProcessMultilineNode processes scalar nodes with style-aware handling for
+// encryption and decryption (including multiline and quoted text variants).
 func ProcessMultilineNode(node *yaml.Node, path string, key, operation string, debug bool) (bool, error) {
 	if node == nil || node.Kind != yaml.ScalarNode {
 		return false, nil

@@ -28,7 +28,7 @@ type appFlags struct {
 }
 
 // parseFlags parses command line arguments and returns an appFlags struct
-func parseFlags() appFlags {
+func parseFlags() (appFlags, error) {
 	// Define flags with short and long forms
 	var flags appFlags
 
@@ -135,16 +135,7 @@ func parseFlags() appFlags {
 
 	flag.Parse()
 
-	// Validate algorithm if provided
-	if flags.algorithm != "" {
-		_, err := validateAlgorithm(flags.algorithm)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Invalid algorithm: %v\n", err)
-			os.Exit(1)
-		}
-	}
-
-	return flags
+	return flags, nil
 }
 
 // getEncryptionKey returns the encryption key from flag or environment variable
@@ -187,11 +178,6 @@ func getEncryptionKey(flagKey string, debug bool) (string, error) {
 	}
 
 	return key, nil
-}
-
-// validateAlgorithm validates the algorithm string and returns the corresponding KeyDerivationAlgorithm
-func validateAlgorithm(algorithm string) (encryption.KeyDerivationAlgorithm, error) {
-	return encryption.ValidateAlgorithm(algorithm)
 }
 
 // displayVersion prints the version information in a formatted way
