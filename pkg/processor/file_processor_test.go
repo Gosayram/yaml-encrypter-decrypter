@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"bytes"
 	"encoding/base64"
 	"fmt"
 	"os"
@@ -1329,5 +1330,75 @@ func TestProcessYAMLWithExclusions(t *testing.T) {
 			// Verify the result
 			tt.verifyFunc(t, string(processedContent), tt.key)
 		})
+	}
+}
+
+func TestProcessFile_PreservesFormattingAfterEncryptDecrypt(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "TestProcessFilePreserveFormatting")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer func() { _ = os.RemoveAll(tempDir) }()
+
+	yamlFile := filepath.Join(tempDir, "sample.yaml")
+	configFile := filepath.Join(tempDir, "config.yaml")
+	key := "K9#mP2$vL5@nR8&qX3*zAb4C"
+
+	original := []byte(`# top comment
+service:
+  username: admin
+  password: "pa ss # keep comment" # inline comment
+  notes: >-
+    keep
+    folded
+
+  nested:
+    key: value
+`)
+
+	config := []byte(`encryption:
+  rules:
+    - name: encrypt_password_only
+      block: service
+      pattern: password
+      action: encrypt
+`)
+
+	if err := os.WriteFile(yamlFile, original, 0644); err != nil {
+		t.Fatalf("Failed to write yaml file: %v", err)
+	}
+	if err := os.WriteFile(configFile, config, 0644); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	if err := ProcessFile(yamlFile, key, OperationEncrypt, false, configFile); err != nil {
+		t.Fatalf("encrypt ProcessFile failed: %v", err)
+	}
+
+	encryptedContent, err := os.ReadFile(yamlFile)
+	if err != nil {
+		t.Fatalf("Failed to read encrypted file: %v", err)
+	}
+	if !bytes.Contains(encryptedContent, []byte("AES256:")) {
+		t.Fatalf("encrypted file does not contain AES256 value")
+	}
+	if !bytes.Contains(encryptedContent, []byte("notes: >-")) {
+		t.Fatalf("folded style marker changed unexpectedly after encryption")
+	}
+	if !bytes.Contains(encryptedContent, []byte("# inline comment")) {
+		t.Fatalf("inline comment was lost after encryption")
+	}
+
+	if err := ProcessFile(yamlFile, key, OperationDecrypt, false, configFile); err != nil {
+		t.Fatalf("decrypt ProcessFile failed: %v", err)
+	}
+
+	decryptedContent, err := os.ReadFile(yamlFile)
+	if err != nil {
+		t.Fatalf("Failed to read decrypted file: %v", err)
+	}
+
+	if !bytes.Equal(decryptedContent, original) {
+		t.Fatalf("format/content mismatch after encrypt+decrypt\nExpected:\n%s\nGot:\n%s", string(original), string(decryptedContent))
 	}
 }

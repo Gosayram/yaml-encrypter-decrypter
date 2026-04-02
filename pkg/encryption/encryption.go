@@ -14,8 +14,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/awnumar/memguard"
 	"golang.org/x/crypto/argon2"
@@ -43,6 +45,18 @@ const (
 
 	// Algorithm indicator size
 	AlgorithmIndicatorLength = 1
+
+	// Cipher metadata/header constants (format v2)
+	headerMagicPrefix     = "YED"
+	headerMagicLength     = 3
+	headerVersionLength   = 1
+	headerTimestampLength = 10 // unix timestamp in seconds, zero-padded ASCII
+	headerV2Version       = 0x02
+	headerV2Length        = headerMagicLength + headerVersionLength + headerTimestampLength + AlgorithmIndicatorLength
+
+	// Human-readable envelope constants.
+	visibleEnvelopeVersion = "v2"
+	visibleEnvelopePrefix  = visibleEnvelopeVersion + ";"
 
 	// Key derivation constants
 	argon2IterationsCount = 4    // Argon2 iterations (t)
@@ -86,6 +100,13 @@ var (
 	DefaultKeyDerivationAlgorithm KeyDerivationAlgorithm = Argon2idAlgorithm
 	defaultAlgorithmMu            sync.RWMutex
 )
+
+// CipherMetadata describes optional metadata embedded into ciphertext header.
+type CipherMetadata struct {
+	FormatVersion int
+	CreatedAt     time.Time
+	Algorithm     KeyDerivationAlgorithm
+}
 
 // init initializes encryption parameters and checks the debug flag
 func init() {
@@ -236,9 +257,19 @@ func Encrypt(password, plaintext string, algorithm ...KeyDerivationAlgorithm) (s
 	ciphertext := aesGCM.Seal(nil, nonce, compressed, nil)
 	secureLog("[DEBUG:Encrypt] Encryption completed\n")
 
+	// Build versioned metadata header:
+	// [magic:3][format_version:1][created_at_unix:8][algorithm_indicator:1]
+	header := make([]byte, 0, headerV2Length)
+	header = append(header, []byte(headerMagicPrefix)...)
+	header = append(header, byte(headerV2Version))
+	createdAtUnix := time.Now().Unix()
+	timestamp := fmt.Sprintf("%010d", createdAtUnix)
+	header = append(header, []byte(timestamp)...)
+	header = append(header, indicator)
+
 	// Combine all components
-	result := make([]byte, 0, 1+len(salt)+len(nonce)+len(ciphertext))
-	result = append(result, indicator)
+	result := make([]byte, 0, len(header)+len(salt)+len(nonce)+len(ciphertext))
+	result = append(result, header...)
 	result = append(result, salt...)
 	result = append(result, nonce...)
 	result = append(result, ciphertext...)
@@ -252,8 +283,9 @@ func Encrypt(password, plaintext string, algorithm ...KeyDerivationAlgorithm) (s
 	result = append(result, hmacValue...)
 	secureLog("[DEBUG:Encrypt] Final payload created\n")
 
-	// Encode in base64
-	encoded := base64.StdEncoding.EncodeToString(result)
+	// Encode in base64 and wrap into a visible metadata envelope.
+	encodedPayload := base64.StdEncoding.EncodeToString(result)
+	encoded := buildVisibleCipherEnvelope(encodedPayload, algo, time.Unix(createdAtUnix, 0).UTC())
 	if styleSuffix != "" {
 		encoded += styleSuffix
 		secureLog("[DEBUG:Encrypt] Added style suffix: '%s'\n", styleSuffix)
@@ -282,28 +314,25 @@ func Decrypt(password, ciphertext string, algorithm ...KeyDerivationAlgorithm) (
 		return "", errors.New("ciphertext cannot be empty")
 	}
 
+	base64Payload, _, err := parseVisibleCipherEnvelope(ciphertext)
+	if err != nil {
+		return "", err
+	}
+
 	// Decode base64 ciphertext
 	secureLog("[DEBUG:Decrypt] Decoding base64 input\n")
-	decoded, err := base64.StdEncoding.DecodeString(ciphertext)
+	decoded, err := base64.StdEncoding.DecodeString(base64Payload)
 	if err != nil {
 		secureLog("[DEBUG:Decrypt] Base64 decoding failed: %v\n", err)
 		return "", fmt.Errorf("failed to decode base64: %w", err)
 	}
 	secureLog("[DEBUG:Decrypt] Base64 decoding completed\n")
 
-	// Extract components
-	if len(decoded) < saltSize+nonceSize+1+hmacSize {
-		secureLog("[DEBUG:Decrypt] Error: payload too short\n")
-		return "", errors.New("invalid ciphertext: too short")
+	algorithmByte, salt, nonce, encryptedData, hmacData, hmacValue, _, err := parseCipherPayload(decoded)
+	if err != nil {
+		secureLog("[DEBUG:Decrypt] Failed to parse payload: %v\n", err)
+		return "", err
 	}
-
-	algorithmByte := decoded[0]
-	salt := decoded[1 : 1+saltSize]
-	nonce := decoded[1+saltSize : 1+saltSize+nonceSize]
-	encryptedData := decoded[1+saltSize+nonceSize : len(decoded)-hmacSize]
-	hmacValue := decoded[len(decoded)-hmacSize:]
-	hmacData := decoded[:len(decoded)-hmacSize]
-
 	secureLog("[DEBUG:Decrypt] Components extracted\n")
 
 	candidates, err := resolveDecryptionAlgorithms(algorithmByte, algorithm...)
@@ -343,6 +372,50 @@ func DecryptToString(encrypted string, password string) (string, error) {
 
 	secureLog("[DEBUG] Decryption successful\n")
 	return result, nil
+}
+
+// ExtractMetadata parses metadata from ciphertext.
+// For legacy ciphertexts without metadata header it returns FormatVersion=1 and zero CreatedAt.
+func ExtractMetadata(ciphertext string) (CipherMetadata, error) {
+	if len(ciphertext) == 0 {
+		return CipherMetadata{}, errors.New("ciphertext cannot be empty")
+	}
+
+	base64Payload, envelopeMeta, err := parseVisibleCipherEnvelope(ciphertext)
+	if err != nil {
+		return CipherMetadata{}, err
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(base64Payload)
+	if err != nil {
+		return CipherMetadata{}, fmt.Errorf("failed to decode base64: %w", err)
+	}
+
+	algorithmByte, _, _, _, _, _, meta, err := parseCipherPayload(decoded)
+	if err != nil {
+		return CipherMetadata{}, err
+	}
+
+	// Envelope metadata is visible and should be reflected in API output.
+	if envelopeMeta != nil {
+		if meta.FormatVersion < envelopeMeta.FormatVersion {
+			meta.FormatVersion = envelopeMeta.FormatVersion
+		}
+		if meta.CreatedAt.IsZero() {
+			meta.CreatedAt = envelopeMeta.CreatedAt
+		}
+		if meta.Algorithm == "" {
+			meta.Algorithm = envelopeMeta.Algorithm
+		}
+	}
+
+	if meta.Algorithm == "" {
+		if algo, mapErr := indicatorToAlgorithm(algorithmByte); mapErr == nil {
+			meta.Algorithm = algo
+		}
+	}
+
+	return meta, nil
 }
 
 // min returns the smaller of x or y.
@@ -467,6 +540,54 @@ func computeHMAC(key, data []byte, algorithm ...byte) []byte {
 
 var errAuthenticationFailed = errors.New("cipher: message authentication failed")
 
+func parseCipherPayload(decoded []byte) (algorithmByte byte, salt, nonce, encryptedData, hmacData, hmacValue []byte, meta CipherMetadata, err error) {
+	const legacyHeaderLength = AlgorithmIndicatorLength + saltSize + nonceSize
+	const minLegacyLength = legacyHeaderLength + hmacSize
+	const minV2Length = headerV2Length + saltSize + nonceSize + hmacSize
+
+	if len(decoded) < minLegacyLength {
+		return 0, nil, nil, nil, nil, nil, CipherMetadata{}, errors.New("invalid ciphertext: too short")
+	}
+
+	offset := 0
+	meta = CipherMetadata{FormatVersion: 1}
+
+	if len(decoded) >= minV2Length && string(decoded[:headerMagicLength]) == headerMagicPrefix {
+		version := int(decoded[headerMagicLength])
+		if version != headerV2Version {
+			return 0, nil, nil, nil, nil, nil, CipherMetadata{}, fmt.Errorf("invalid ciphertext: unsupported format version %d", version)
+		}
+
+		timestampRaw := decoded[headerMagicLength+headerVersionLength : headerMagicLength+headerVersionLength+headerTimestampLength]
+		createdAtUnix, parseErr := strconv.ParseInt(string(timestampRaw), 10, 64)
+		if parseErr != nil {
+			return 0, nil, nil, nil, nil, nil, CipherMetadata{}, fmt.Errorf("invalid ciphertext: malformed timestamp metadata")
+		}
+		meta = CipherMetadata{
+			FormatVersion: version,
+			CreatedAt:     time.Unix(createdAtUnix, 0).UTC(),
+		}
+
+		offset = headerV2Length - AlgorithmIndicatorLength
+	}
+
+	algorithmByte = decoded[offset]
+	if algo, mapErr := indicatorToAlgorithm(algorithmByte); mapErr == nil {
+		meta.Algorithm = algo
+	}
+	start := offset + AlgorithmIndicatorLength
+	if len(decoded) < start+saltSize+nonceSize+hmacSize {
+		return 0, nil, nil, nil, nil, nil, CipherMetadata{}, errors.New("invalid ciphertext: too short")
+	}
+
+	salt = decoded[start : start+saltSize]
+	nonce = decoded[start+saltSize : start+saltSize+nonceSize]
+	encryptedData = decoded[start+saltSize+nonceSize : len(decoded)-hmacSize]
+	hmacValue = decoded[len(decoded)-hmacSize:]
+	hmacData = decoded[:len(decoded)-hmacSize]
+	return algorithmByte, salt, nonce, encryptedData, hmacData, hmacValue, meta, nil
+}
+
 func decryptWithAlgorithm(password string, algo KeyDerivationAlgorithm, algorithmByte byte, salt, nonce, encryptedData, hmacData, hmacValue []byte) (string, error) {
 	secureLog("[DEBUG:Decrypt] Trying algorithm: %s\n", algo)
 
@@ -528,6 +649,70 @@ func resolveDecryptionAlgorithms(algorithmByte byte, explicit ...KeyDerivationAl
 	default:
 		return nil, fmt.Errorf("invalid ciphertext: unknown algorithm indicator 0x%x", algorithmByte)
 	}
+}
+
+func indicatorToAlgorithm(indicator byte) (KeyDerivationAlgorithm, error) {
+	switch indicator {
+	case Argon2idIndicator, legacyArgon2Indicator:
+		return Argon2idAlgorithm, nil
+	case PBKDF2SHA256Indicator:
+		return PBKDF2SHA256Algorithm, nil
+	case PBKDF2SHA512Indicator:
+		return PBKDF2SHA512Algorithm, nil
+	case legacyPBKDF2Indicator:
+		// Legacy marker cannot distinguish SHA-256/SHA-512.
+		return "", fmt.Errorf("ambiguous legacy pbkdf2 algorithm indicator")
+	default:
+		return "", fmt.Errorf("invalid ciphertext: unknown algorithm indicator 0x%x", indicator)
+	}
+}
+
+func buildVisibleCipherEnvelope(base64Payload string, algorithm KeyDerivationAlgorithm, createdAt time.Time) string {
+	return fmt.Sprintf("%s;ts=%d;alg=%s;%s", visibleEnvelopeVersion, createdAt.Unix(), algorithm, base64Payload)
+}
+
+func parseVisibleCipherEnvelope(ciphertext string) (string, *CipherMetadata, error) {
+	if !strings.HasPrefix(ciphertext, visibleEnvelopePrefix) {
+		return ciphertext, nil, nil
+	}
+
+	parts := strings.SplitN(ciphertext, ";", 4)
+	if len(parts) != 4 {
+		return "", nil, errors.New("invalid ciphertext envelope: malformed structure")
+	}
+	if parts[0] != visibleEnvelopeVersion {
+		return "", nil, fmt.Errorf("invalid ciphertext envelope: unsupported version %q", parts[0])
+	}
+	if !strings.HasPrefix(parts[1], "ts=") {
+		return "", nil, errors.New("invalid ciphertext envelope: missing ts field")
+	}
+	if !strings.HasPrefix(parts[2], "alg=") {
+		return "", nil, errors.New("invalid ciphertext envelope: missing alg field")
+	}
+
+	tsRaw := strings.TrimPrefix(parts[1], "ts=")
+	createdAtUnix, err := strconv.ParseInt(tsRaw, 10, 64)
+	if err != nil {
+		return "", nil, errors.New("invalid ciphertext envelope: malformed ts field")
+	}
+
+	algoRaw := strings.TrimPrefix(parts[2], "alg=")
+	algo, err := ValidateAlgorithm(algoRaw)
+	if err != nil {
+		return "", nil, fmt.Errorf("invalid ciphertext envelope: invalid alg field: %w", err)
+	}
+
+	base64Payload := parts[3]
+	if base64Payload == "" {
+		return "", nil, errors.New("invalid ciphertext envelope: empty payload")
+	}
+
+	meta := &CipherMetadata{
+		FormatVersion: headerV2Version,
+		CreatedAt:     time.Unix(createdAtUnix, 0).UTC(),
+		Algorithm:     algo,
+	}
+	return base64Payload, meta, nil
 }
 
 func algorithmToIndicator(algo KeyDerivationAlgorithm) (byte, error) {

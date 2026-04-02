@@ -3,16 +3,18 @@ package processor
 import (
 	"bufio"
 	"bytes"
-	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/atlet99/yaml-encrypter-decrypter/pkg/encryption"
 
@@ -151,6 +153,7 @@ const (
 	MaskLength           = 6
 	MinKeyLength         = 15 // Minimum length for encryption key (NIST SP 800-63B)
 	MinKeyLengthStandard = 20 // Minimum length for encryption key in standard processor
+	minKeyLengthGuard    = 8  // Guardrail for obviously weak keys before KDF validation
 	Base64BlockSize      = 4  // Block size for Base64 encoding
 
 	// Base64 padding constants
@@ -199,6 +202,8 @@ const (
 
 	// UnknownAlgorithm is the constant for unknown algorithm
 	UnknownAlgorithm = "unknown algorithm"
+	matchStatusNo    = "does not match"
+	matchStatusOK    = "matches"
 
 	// Constants for YAML structure
 	linesPerRule = 6
@@ -361,36 +366,11 @@ func detectAlgorithm(encryptedValue string) string {
 	}
 
 	data := strings.TrimPrefix(encryptedValue, AES)
-	if len(data) < AlgorithmIndicatorLength {
-		return UnknownAlgorithm
+	if meta, err := encryption.ExtractMetadata(data); err == nil && meta.Algorithm != "" {
+		return string(meta.Algorithm)
 	}
 
-	// Try to decode the base64
-	decoded, err := base64.StdEncoding.DecodeString(data)
-	if err != nil {
-		return UnknownAlgorithm
-	}
-
-	// Extract algorithm indicator (first 16 bytes)
-	if len(decoded) < AlgorithmIndicatorLength {
-		return UnknownAlgorithm
-	}
-
-	// Convert the algorithm bytes to string and trim nulls
-	algoBytes := decoded[:AlgorithmIndicatorLength]
-	algoStr := strings.TrimRight(string(algoBytes), "\x00")
-
-	// Use switch instead of if-else
-	switch {
-	case strings.HasPrefix(algoStr, "argon2id"):
-		return "argon2id"
-	case strings.HasPrefix(algoStr, "pbkdf2-sha256"):
-		return "pbkdf2-sha256"
-	case strings.HasPrefix(algoStr, "pbkdf2-sha512"):
-		return "pbkdf2-sha512"
-	default:
-		return UnknownAlgorithm
-	}
+	return UnknownAlgorithm
 }
 
 // regexCache stores compiled regular expressions
@@ -529,19 +509,35 @@ func matchesPattern(path, pattern string, debug bool) bool {
 			return false
 		}
 		matches := re.MatchString(path)
-		matchStatus := "does not match"
+		matchStatus := matchStatusNo
 		if matches {
-			matchStatus = "matches"
+			matchStatus = matchStatusOK
 		}
 		debugLog(debug, "Path '%s' %s wildcard pattern '%s'", path, matchStatus, pattern)
 		return matches
 	}
 
+	// Treat alternation patterns like "a|b|c" as regex alternatives.
+	if strings.Contains(pattern, "|") {
+		re, err := getCompiledRegex("^(" + pattern + ")$")
+		if err != nil {
+			debugLog(debug, "Error compiling alternation regex for pattern '%s': %v", pattern, err)
+			return false
+		}
+		matches := re.MatchString(path)
+		matchStatus := matchStatusNo
+		if matches {
+			matchStatus = matchStatusOK
+		}
+		debugLog(debug, "Path '%s' %s alternation pattern '%s'", path, matchStatus, pattern)
+		return matches
+	}
+
 	// Direct comparison for non-wildcard patterns
 	matches := path == pattern
-	matchStatus := "does not match"
+	matchStatus := matchStatusNo
 	if matches {
-		matchStatus = "matches"
+		matchStatus = matchStatusOK
 	}
 	debugLog(debug, "Path '%s' %s pattern '%s'", path, matchStatus, pattern)
 	return matches
@@ -683,17 +679,26 @@ func processScalarNodeWithExclusions(node *yaml.Node, path string, key, operatio
 	// Mark as processed
 	processedPaths[path] = true
 
-	// Try to process as multiline node first
-	processed, err := ProcessMultilineNode(node, path, key, operation, debug)
-	if err != nil {
-		return err
-	}
-	if processed {
+	// Check whether any rule applies before doing style-specific processing.
+	_, canApply := processRules(path, rules, debug)
+	if !canApply {
+		debugLog(debug, "No rules apply to path: %s", path)
 		return nil
 	}
 
-	// Continue with standard node processing
-	debugLog(debug, "Processing scalar node as standard at path: %s", path)
+	// Apply multiline/quoted processor only for style-sensitive nodes.
+	if node.Style == yaml.LiteralStyle || node.Style == yaml.FoldedStyle ||
+		node.Style == yaml.DoubleQuotedStyle || node.Style == yaml.SingleQuotedStyle {
+		processed, err := ProcessMultilineNode(node, path, key, operation, debug)
+		if err != nil {
+			return err
+		}
+		if processed {
+			return nil
+		}
+	}
+
+	// Continue with standard node processing for regular scalars.
 	return processScalarNodeStandard(node, path, operation, key, rules, debug)
 }
 
@@ -704,8 +709,8 @@ func processScalarNodeStandard(node *yaml.Node, path string, operation string, k
 		return fmt.Errorf("invalid operation: %s", operation)
 	}
 
-	// Check key strength
-	if len(key) < MinKeyLengthStandard {
+	// Keep backward-compatible weak-key error semantics for obviously short keys.
+	if len(key) < minKeyLengthGuard {
 		return fmt.Errorf("key is too weak: length should be at least %d characters", MinKeyLengthStandard)
 	}
 
@@ -751,21 +756,37 @@ func processScalarNodeStandard(node *yaml.Node, path string, operation string, k
 			return fmt.Errorf("value at path %s is not encrypted", path)
 		}
 
-		// Extract the encrypted value (skipping the AES marker)
-		encrypted := strings.TrimPrefix(node.Value, AES)
+		// Extract the encrypted value (skipping the AES marker) and strip style suffix.
+		encrypted := cleanMultilineEncrypted(strings.TrimPrefix(node.Value, AES), debug)
+		cleanedEncrypted, styleSuffix := extractStyleSuffix(encrypted, debug)
 
 		// Decrypt the value
-		decrypted, err := encryption.DecryptToString(encrypted, key)
+		decrypted, err := encryption.DecryptToString(cleanedEncrypted, key)
 		if err != nil {
 			return fmt.Errorf("failed to decrypt value at path %s: %w", path, err)
 		}
 
 		// Set the decrypted value and apply style
 		node.Value = decrypted
-		applyNodeStyle(node, 0, debug)
+		applyNodeStyle(node, styleSuffixToYAMLStyle(styleSuffix), debug)
 	}
 
 	return nil
+}
+
+func styleSuffixToYAMLStyle(styleSuffix string) yaml.Style {
+	switch styleSuffix {
+	case "|" + StyleLiteral:
+		return yaml.LiteralStyle
+	case "|" + StyleFolded:
+		return yaml.FoldedStyle
+	case "|" + StyleDoubleQuoted:
+		return yaml.DoubleQuotedStyle
+	case "|" + StyleSingleQuoted:
+		return yaml.SingleQuotedStyle
+	default:
+		return 0
+	}
 }
 
 // ProcessFile processes a YAML file with encryption or decryption
@@ -818,19 +839,307 @@ func ProcessFile(filePath, key, operation string, debug bool, configPath string)
 	}
 
 	// Marshal the processed YAML back to bytes
-	var buf bytes.Buffer
-	encoder := yaml.NewEncoder(&buf)
-	encoder.SetIndent(DefaultIndent)
-	if err := encoder.Encode(node); err != nil {
-		return fmt.Errorf("error encoding YAML: %w", err)
+	processedContent, err := applyScalarEditsToOriginalContent(content, node)
+	if err != nil {
+		return fmt.Errorf("error applying scalar edits: %w", err)
 	}
 
 	// Write the processed content back to the file
-	if err := os.WriteFile(filePath, buf.Bytes(), SecureFileMode); err != nil {
+	if err := os.WriteFile(filePath, processedContent, SecureFileMode); err != nil { // #nosec G703 -- file path is intentionally provided by caller
 		return fmt.Errorf("error writing file: %w", err)
 	}
 
 	return nil
+}
+
+type scalarEdit struct {
+	start       int
+	end         int
+	replacement string
+}
+
+func applyScalarEditsToOriginalContent(original []byte, processedNode *yaml.Node) ([]byte, error) {
+	var parsedOriginal yaml.Node
+	decoder := yaml.NewDecoder(bytes.NewReader(original))
+	if err := decoder.Decode(&parsedOriginal); err != nil {
+		return nil, fmt.Errorf("error parsing original YAML: %w", err)
+	}
+
+	if processedNode == nil {
+		return nil, errors.New("processed node is nil")
+	}
+
+	originalLines := strings.Split(string(original), "\n")
+	lineOffsets := make([]int, len(originalLines))
+	offset := 0
+	for i, line := range originalLines {
+		lineOffsets[i] = offset
+		offset += len(line)
+		if i < len(originalLines)-1 {
+			offset++
+		}
+	}
+
+	var edits []scalarEdit
+	if err := collectScalarEdits(&parsedOriginal, processedNode, originalLines, lineOffsets, &edits); err != nil {
+		return nil, err
+	}
+
+	if len(edits) == 0 {
+		return original, nil
+	}
+
+	sort.Slice(edits, func(i, j int) bool {
+		return edits[i].start > edits[j].start
+	})
+
+	updated := string(original)
+	for _, edit := range edits {
+		if edit.start < 0 || edit.end < edit.start || edit.end > len(updated) {
+			return nil, fmt.Errorf("invalid edit range: [%d,%d)", edit.start, edit.end)
+		}
+		updated = updated[:edit.start] + edit.replacement + updated[edit.end:]
+	}
+
+	return []byte(updated), nil
+}
+
+func collectScalarEdits(originalNode, processedNode *yaml.Node, lines []string, lineOffsets []int, edits *[]scalarEdit) error {
+	if originalNode == nil || processedNode == nil {
+		return nil
+	}
+
+	if originalNode.Kind != processedNode.Kind {
+		return nil
+	}
+
+	if originalNode.Kind == yaml.ScalarNode {
+		if originalNode.Value == processedNode.Value &&
+			originalNode.Style == processedNode.Style &&
+			originalNode.Tag == processedNode.Tag {
+			return nil
+		}
+
+		start, end, err := locateScalarSpan(originalNode, lines, lineOffsets)
+		if err != nil {
+			return err
+		}
+
+		replacement := renderScalarReplacement(originalNode, processedNode, lines)
+		*edits = append(*edits, scalarEdit{
+			start:       start,
+			end:         end,
+			replacement: replacement,
+		})
+		return nil
+	}
+
+	for i := 0; i < len(originalNode.Content) && i < len(processedNode.Content); i++ {
+		if err := collectScalarEdits(originalNode.Content[i], processedNode.Content[i], lines, lineOffsets, edits); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func locateScalarSpan(node *yaml.Node, lines []string, lineOffsets []int) (int, int, error) {
+	if node.Line <= 0 || node.Line > len(lines) {
+		return 0, 0, fmt.Errorf("invalid node line: %d", node.Line)
+	}
+
+	lineIdx := node.Line - 1
+	line := lines[lineIdx]
+	startInLine := byteIndexAtColumn(line, node.Column)
+	start := lineOffsets[lineIdx] + startInLine
+
+	switch node.Style {
+	case yaml.LiteralStyle, yaml.FoldedStyle:
+		end := locateBlockScalarEnd(node, lines, lineOffsets)
+		return start, end, nil
+	default:
+		endInLine := locateInlineScalarEnd(node, line, startInLine)
+		end := lineOffsets[lineIdx] + endInLine
+		return start, end, nil
+	}
+}
+
+func locateBlockScalarEnd(node *yaml.Node, lines []string, lineOffsets []int) int {
+	headerLine := node.Line - 1
+	headerIndent := leadingSpaces(lines[headerLine])
+	endLine := len(lines)
+
+	for i := headerLine + 1; i < len(lines); i++ {
+		line := lines[i]
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		if leadingSpaces(line) <= headerIndent {
+			endLine = i
+			break
+		}
+	}
+
+	if endLine >= len(lines) {
+		return len(strings.Join(lines, "\n"))
+	}
+	return lineOffsets[endLine]
+}
+
+func locateInlineScalarEnd(node *yaml.Node, line string, start int) int {
+	if start >= len(line) {
+		return len(line)
+	}
+
+	switch node.Style {
+	case yaml.DoubleQuotedStyle:
+		return findDoubleQuotedEnd(line, start)
+	case yaml.SingleQuotedStyle:
+		return findSingleQuotedEnd(line, start)
+	default:
+		return findPlainScalarEnd(line, start)
+	}
+}
+
+func findDoubleQuotedEnd(line string, start int) int {
+	for i := start + 1; i < len(line); i++ {
+		if line[i] == '"' && line[i-1] != '\\' {
+			return i + 1
+		}
+	}
+	return len(line)
+}
+
+func findSingleQuotedEnd(line string, start int) int {
+	for i := start + 1; i < len(line); i++ {
+		if line[i] != '\'' {
+			continue
+		}
+		if i+1 < len(line) && line[i+1] == '\'' {
+			i++
+			continue
+		}
+		return i + 1
+	}
+	return len(line)
+}
+
+func findPlainScalarEnd(line string, start int) int {
+	commentPos := -1
+	for i := start; i < len(line); i++ {
+		if line[i] == '#' && (i == 0 || line[i-1] == ' ' || line[i-1] == '\t') {
+			commentPos = i
+			break
+		}
+	}
+	if commentPos == -1 {
+		return len(strings.TrimRight(line, " \t"))
+	}
+	j := commentPos - 1
+	for j >= start && (line[j] == ' ' || line[j] == '\t') {
+		j--
+	}
+	return j + 1
+}
+
+func renderScalarReplacement(originalNode, processedNode *yaml.Node, lines []string) string {
+	originalStyle := originalNode.Style
+	value := processedNode.Value
+
+	if originalStyle == yaml.LiteralStyle || originalStyle == yaml.FoldedStyle {
+		indicator := "|-"
+		if originalStyle == yaml.FoldedStyle {
+			indicator = ">-"
+		}
+
+		headerLine := lines[originalNode.Line-1]
+		contentIndent := strings.Repeat(" ", leadingSpaces(headerLine)+2)
+		lines := strings.Split(strings.TrimSuffix(value, "\n"), "\n")
+		if len(lines) == 1 && lines[0] == "" {
+			return indicator
+		}
+		for i := range lines {
+			lines[i] = contentIndent + lines[i]
+		}
+		return indicator + "\n" + strings.Join(lines, "\n") + "\n"
+	}
+
+	inlineStyle := processedNode.Style
+	if originalStyle == yaml.DoubleQuotedStyle || originalStyle == yaml.SingleQuotedStyle {
+		inlineStyle = originalStyle
+	}
+	return renderInlineScalar(value, inlineStyle)
+}
+
+func renderInlineScalar(value string, style yaml.Style) string {
+	switch style {
+	case yaml.DoubleQuotedStyle:
+		return `"` + escapeDoubleQuoted(value) + `"`
+	case yaml.SingleQuotedStyle:
+		return `'` + strings.ReplaceAll(value, `'`, `''`) + `'`
+	default:
+		if needsQuoting(value) {
+			return `'` + strings.ReplaceAll(value, `'`, `''`) + `'`
+		}
+		return value
+	}
+}
+
+func escapeDoubleQuoted(value string) string {
+	replacer := strings.NewReplacer(
+		`\\`, `\\\\`,
+		`"`, `\"`,
+		"\n", `\n`,
+		"\t", `\t`,
+		"\r", `\r`,
+	)
+	return replacer.Replace(value)
+}
+
+func needsQuoting(value string) bool {
+	if value == "" {
+		return true
+	}
+	if strings.ContainsAny(value, "\n\r\t") {
+		return true
+	}
+	if strings.HasPrefix(value, " ") || strings.HasSuffix(value, " ") {
+		return true
+	}
+	if strings.Contains(value, ": ") || strings.Contains(value, " #") {
+		return true
+	}
+	if strings.HasPrefix(value, "- ") || strings.HasPrefix(value, "? ") || strings.HasPrefix(value, "!") {
+		return true
+	}
+	return false
+}
+
+func byteIndexAtColumn(line string, column int) int {
+	if column <= 1 {
+		return 0
+	}
+	idx := 0
+	for currentCol := 1; currentCol < column && idx < len(line); currentCol++ {
+		_, size := utf8.DecodeRuneInString(line[idx:])
+		if size <= 0 {
+			break
+		}
+		idx += size
+	}
+	return idx
+}
+
+func leadingSpaces(s string) int {
+	count := 0
+	for _, r := range s {
+		if r != ' ' {
+			break
+		}
+		count++
+	}
+	return count
 }
 
 // Structure to hold information about folded style sections
@@ -1435,6 +1744,12 @@ func checkDuplicateRules(rules []Rule, debug bool) []string {
 // processRules processes rules in order of priority
 func processRules(path string, rules []Rule, debug bool) (string, bool) {
 	debugLog(debug, "Processing rules for path: %s", path)
+
+	// Backward-compatible mode: if no rules provided, process all scalar paths.
+	if len(rules) == 0 {
+		debugLog(debug, "No rules configured, processing path by default: %s", path)
+		return "default-all", true
+	}
 
 	// Check rules with action=none first
 	for _, rule := range rules {

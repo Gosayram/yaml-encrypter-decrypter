@@ -8,7 +8,32 @@ import (
 	"encoding/base64"
 	"strings"
 	"testing"
+	"time"
 )
+
+func decodeCipherForTest(t *testing.T, ciphertext string) ([]byte, *CipherMetadata) {
+	t.Helper()
+
+	base64Payload, envelopeMeta, err := parseVisibleCipherEnvelope(ciphertext)
+	if err != nil {
+		t.Fatalf("parseVisibleCipherEnvelope() error = %v", err)
+	}
+
+	raw, err := base64.StdEncoding.DecodeString(base64Payload)
+	if err != nil {
+		t.Fatalf("DecodeString() error = %v", err)
+	}
+
+	return raw, envelopeMeta
+}
+
+func encodeCipherForTest(raw []byte, envelopeMeta *CipherMetadata) string {
+	payload := base64.StdEncoding.EncodeToString(raw)
+	if envelopeMeta == nil {
+		return payload
+	}
+	return buildVisibleCipherEnvelope(payload, envelopeMeta.Algorithm, envelopeMeta.CreatedAt)
+}
 
 func TestEncryptDecrypt(t *testing.T) {
 	tests := []struct {
@@ -177,9 +202,13 @@ func TestDecryptWithCorruptedData(t *testing.T) {
 			name: "corrupted format",
 			key:  password,
 			corruptFunc: func(s string) string {
-				decoded, _ := base64.StdEncoding.DecodeString(s)
+				base64Payload, envelopeMeta, err := parseVisibleCipherEnvelope(s)
+				if err != nil {
+					return s
+				}
+				decoded, _ := base64.StdEncoding.DecodeString(base64Payload)
 				// Return text too short to break the format
-				return base64.StdEncoding.EncodeToString(decoded[:20])
+				return encodeCipherForTest(decoded[:20], envelopeMeta)
 			},
 			expectError:   true,
 			errorContains: "invalid ciphertext: too short",
@@ -188,14 +217,18 @@ func TestDecryptWithCorruptedData(t *testing.T) {
 			name: "corrupted hmac",
 			key:  password,
 			corruptFunc: func(s string) string {
-				decoded, _ := base64.StdEncoding.DecodeString(s)
+				base64Payload, envelopeMeta, err := parseVisibleCipherEnvelope(s)
+				if err != nil {
+					return s
+				}
+				decoded, _ := base64.StdEncoding.DecodeString(base64Payload)
 				if len(decoded) > hmacSize {
 					// Invert all HMAC bits
 					for i := len(decoded) - hmacSize; i < len(decoded); i++ {
 						decoded[i] = ^decoded[i] // Invert all bits
 					}
 				}
-				return base64.StdEncoding.EncodeToString(decoded)
+				return encodeCipherForTest(decoded, envelopeMeta)
 			},
 			expectError:   true,
 			errorContains: "cipher: message authentication failed",
@@ -295,6 +328,106 @@ func TestDecryptAutoDetectAlgorithm(t *testing.T) {
 				t.Fatalf("Decrypt() = %q, want %q", decrypted, data)
 			}
 		})
+	}
+}
+
+func TestEncryptIncludesMetadataHeader(t *testing.T) {
+	password := "P@ssw0rd_Str0ng!T3st#2024"
+	data := "metadata header payload"
+
+	encrypted, err := Encrypt(password, data, PBKDF2SHA256Algorithm)
+	if err != nil {
+		t.Fatalf("Encrypt() error = %v", err)
+	}
+
+	raw, envelopeMeta := decodeCipherForTest(t, encrypted)
+	if envelopeMeta == nil {
+		t.Fatal("expected visible envelope metadata, got nil")
+	}
+	if envelopeMeta.FormatVersion != headerV2Version {
+		t.Fatalf("visible metadata format version mismatch: got %d want %d", envelopeMeta.FormatVersion, headerV2Version)
+	}
+	if envelopeMeta.Algorithm != PBKDF2SHA256Algorithm {
+		t.Fatalf("visible metadata algorithm mismatch: got %s want %s", envelopeMeta.Algorithm, PBKDF2SHA256Algorithm)
+	}
+
+	if len(raw) < headerV2Length+saltSize+nonceSize+hmacSize {
+		t.Fatalf("payload too short for v2 format: %d", len(raw))
+	}
+
+	if string(raw[:headerMagicLength]) != headerMagicPrefix {
+		t.Fatalf("missing metadata magic prefix, got: %x", raw[:headerMagicLength])
+	}
+
+	if raw[headerMagicLength] != byte(headerV2Version) {
+		t.Fatalf("unexpected metadata format version: got %d want %d", raw[headerMagicLength], headerV2Version)
+	}
+
+	indicatorOffset := headerV2Length - AlgorithmIndicatorLength
+	if raw[indicatorOffset] != PBKDF2SHA256Indicator {
+		t.Fatalf("unexpected algorithm indicator: got 0x%x want 0x%x", raw[indicatorOffset], PBKDF2SHA256Indicator)
+	}
+}
+
+func TestExtractMetadata(t *testing.T) {
+	password := "P@ssw0rd_Str0ng!T3st#2024"
+	data := "metadata extraction payload"
+
+	before := time.Now().UTC().Add(-2 * time.Second)
+	encrypted, err := Encrypt(password, data, Argon2idAlgorithm)
+	if err != nil {
+		t.Fatalf("Encrypt() error = %v", err)
+	}
+
+	meta, err := ExtractMetadata(encrypted)
+	if err != nil {
+		t.Fatalf("ExtractMetadata() error = %v", err)
+	}
+
+	if meta.FormatVersion != headerV2Version {
+		t.Fatalf("metadata format version mismatch: got %d want %d", meta.FormatVersion, headerV2Version)
+	}
+
+	if meta.CreatedAt.IsZero() {
+		t.Fatal("metadata CreatedAt must be present for v2 ciphertext")
+	}
+
+	if meta.CreatedAt.Before(before) || meta.CreatedAt.After(time.Now().UTC().Add(2*time.Second)) {
+		t.Fatalf("metadata CreatedAt out of expected range: %v", meta.CreatedAt)
+	}
+	if meta.Algorithm != Argon2idAlgorithm {
+		t.Fatalf("metadata algorithm mismatch: got %s want %s", meta.Algorithm, Argon2idAlgorithm)
+	}
+}
+
+func TestExtractMetadataLegacyPayload(t *testing.T) {
+	password := "P@ssw0rd_Str0ng!T3st#2024"
+	data := "legacy metadata payload"
+
+	encrypted, err := Encrypt(password, data, Argon2idAlgorithm)
+	if err != nil {
+		t.Fatalf("Encrypt() error = %v", err)
+	}
+
+	raw, _ := decodeCipherForTest(t, encrypted)
+
+	// Convert v2 payload to legacy layout by removing metadata fields before indicator.
+	legacyRaw := raw[headerV2Length-AlgorithmIndicatorLength:]
+	legacyCiphertext := base64.StdEncoding.EncodeToString(legacyRaw)
+
+	meta, err := ExtractMetadata(legacyCiphertext)
+	if err != nil {
+		t.Fatalf("ExtractMetadata() error for legacy payload = %v", err)
+	}
+
+	if meta.FormatVersion != 1 {
+		t.Fatalf("legacy metadata format version mismatch: got %d want 1", meta.FormatVersion)
+	}
+	if !meta.CreatedAt.IsZero() {
+		t.Fatalf("legacy metadata CreatedAt should be zero, got %v", meta.CreatedAt)
+	}
+	if meta.Algorithm != Argon2idAlgorithm {
+		t.Fatalf("legacy metadata algorithm mismatch: got %s want %s", meta.Algorithm, Argon2idAlgorithm)
 	}
 }
 
@@ -403,10 +536,7 @@ func TestBackwardCompatibility(t *testing.T) {
 	}
 
 	// 3. Modify encrypted data by removing first 16 bytes (algorithm indicator)
-	rawData, err := base64.StdEncoding.DecodeString(encrypted)
-	if err != nil {
-		t.Fatalf("Failed to decode base64: %v", err)
-	}
+	rawData, _ := decodeCipherForTest(t, encrypted)
 
 	t.Logf("Original encrypted data length: %d bytes", len(rawData))
 
@@ -551,7 +681,7 @@ func TestDecryptToString(t *testing.T) {
 			password:      password,
 			encrypted:     encrypted[:10],
 			expectError:   true,
-			errorContains: "illegal base64",
+			errorContains: "invalid ciphertext envelope",
 		},
 	}
 
