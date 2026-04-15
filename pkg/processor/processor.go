@@ -1497,11 +1497,20 @@ func processIncludedRules(config *Config, configFile string, debug bool) ([]Rule
 	// Process include_rules if specified
 	if len(config.Encryption.IncludeRules) > 0 {
 		for _, rulePattern := range config.Encryption.IncludeRules {
+			if isExplicitIncludeRuleFile(rulePattern) {
+				resolvedPattern := resolveIncludePattern(rulePattern, configDir)
+				rules, err := loadRulesFromFile(resolvedPattern, debug)
+				if err != nil {
+					return nil, fmt.Errorf("failed to load included rules from file '%s': %w", rulePattern, err)
+				}
+				includedRules = append(includedRules, rules...)
+				continue
+			}
+
 			// Process the include file pattern (which may contain wildcards like rules[1-3].yml)
 			rules, err := loadRulesFromPattern(rulePattern, configDir, debug)
 			if err != nil {
-				debugLog(debug, "Error loading included rules from '%s': %v", rulePattern, err)
-				continue
+				return nil, fmt.Errorf("failed to load included rules from pattern '%s': %w", rulePattern, err)
 			}
 			includedRules = append(includedRules, rules...)
 		}
@@ -1565,25 +1574,33 @@ const (
 	RangeRegexMatchCount = 3
 )
 
+var includeRangeRegex = regexp.MustCompile(`\[(\d+)-(\d+)\]`)
+
+func isExplicitIncludeRuleFile(pattern string) bool {
+	return !strings.ContainsAny(pattern, "*?") && !includeRangeRegex.MatchString(pattern)
+}
+
+func resolveIncludePattern(pattern, baseDir string) string {
+	if filepath.IsAbs(pattern) {
+		return pattern
+	}
+	if strings.HasPrefix(pattern, "./") || strings.HasPrefix(pattern, "../") {
+		return filepath.Clean(pattern)
+	}
+	return filepath.Join(baseDir, pattern)
+}
+
 // loadRulesFromPattern loads rules from files matching a pattern
 // Supports patterns like "rules[1-3].yml" or "*.yml"
 func loadRulesFromPattern(pattern string, baseDir string, debug bool) ([]Rule, error) {
 	var allRules []Rule
 
-	// If path is relative and doesn't start with "./" or "../", resolve it against the base directory
-	if !filepath.IsAbs(pattern) && !strings.HasPrefix(pattern, "./") && !strings.HasPrefix(pattern, "../") {
-		pattern = filepath.Join(baseDir, pattern)
-	} else if strings.HasPrefix(pattern, "./") || strings.HasPrefix(pattern, "../") {
-		// If the path is relative with explicit ./ or ../, resolve it against the current directory
-		// This preserves the user's intent to use a relative path
-		pattern = filepath.Clean(pattern)
-	}
+	pattern = resolveIncludePattern(pattern, baseDir)
 
 	debugLog(debug, "Resolving pattern '%s' (baseDir: '%s')", pattern, baseDir)
 
 	// Check if the pattern contains range syntax like [1-3]
-	rangeRegex := regexp.MustCompile(`\[(\d+)-(\d+)\]`)
-	matches := rangeRegex.FindStringSubmatch(pattern)
+	matches := includeRangeRegex.FindStringSubmatch(pattern)
 
 	if len(matches) == RangeRegexMatchCount {
 		// Extract range bounds
@@ -2717,41 +2734,20 @@ func LoadAdditionalRules(config *Config, configDir string, debug bool) ([]Rule, 
 
 	if len(config.Encryption.IncludeRules) > 0 {
 		for _, rulePattern := range config.Encryption.IncludeRules {
-			// Check if this is an absolute path
-			if filepath.IsAbs(rulePattern) {
-				debugLog(debug, "Using absolute path for include rule: %s", rulePattern)
-				// If it's an absolute path, use it directly
-				rules, err := loadRulesFromFile(rulePattern, debug)
+			if isExplicitIncludeRuleFile(rulePattern) {
+				resolvedPath := resolveIncludePattern(rulePattern, configDir)
+				rules, err := loadRulesFromFile(resolvedPath, debug)
 				if err != nil {
-					debugLog(debug, "Error loading included rules from '%s': %v", rulePattern, err)
-					continue
+					return nil, nil, fmt.Errorf("failed to load additional rules from file '%s': %w", rulePattern, err)
 				}
 				includedRules = append(includedRules, rules...)
 				continue
 			}
 
-			// If not an absolute path, try as a relative path first
-			resolvedPath := rulePattern
-			// If it doesn't have file:// prefix or wildcards, try to resolve it relative to configDir
-			if !strings.Contains(rulePattern, "*") && !strings.Contains(rulePattern, "[") && !strings.Contains(rulePattern, "]") {
-				fullPath := filepath.Join(configDir, rulePattern)
-				if _, err := os.Stat(fullPath); err == nil {
-					debugLog(debug, "Found file at path: %s", fullPath)
-					rules, err := loadRulesFromFile(fullPath, debug)
-					if err != nil {
-						debugLog(debug, "Error loading included rules from '%s': %v", fullPath, err)
-						continue
-					}
-					includedRules = append(includedRules, rules...)
-					continue
-				}
-			}
-
 			// Process the include file pattern (which may contain wildcards like rules[1-3].yml)
-			rules, err := loadRulesFromPattern(resolvedPath, configDir, debug)
+			rules, err := loadRulesFromPattern(rulePattern, configDir, debug)
 			if err != nil {
-				debugLog(debug, "Error loading included rules from '%s': %v", rulePattern, err)
-				continue
+				return nil, nil, fmt.Errorf("failed to load additional rules from pattern '%s': %w", rulePattern, err)
 			}
 			includedRules = append(includedRules, rules...)
 		}

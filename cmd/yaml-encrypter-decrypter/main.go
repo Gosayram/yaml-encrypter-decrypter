@@ -21,6 +21,23 @@ const (
 	VersionParts = 2
 )
 
+func parseIncludeRulePatterns(input string) []string {
+	if strings.TrimSpace(input) == "" {
+		return nil
+	}
+
+	rawPatterns := strings.Split(input, ",")
+	patterns := make([]string, 0, len(rawPatterns))
+	for _, pattern := range rawPatterns {
+		trimmed := strings.TrimSpace(pattern)
+		if trimmed == "" {
+			continue
+		}
+		patterns = append(patterns, trimmed)
+	}
+	return patterns
+}
+
 func main() {
 	// Safe termination when receiving interrupt signal
 	memguard.CatchInterrupt()
@@ -123,7 +140,7 @@ func mainWithExitCode() int {
 	// Process additional rule files if specified
 	if flags.includeRules != "" {
 		// Parse comma-separated list of rule files
-		additionalRules := strings.Split(flags.includeRules, ",")
+		additionalRules := parseIncludeRulePatterns(flags.includeRules)
 
 		// Create a temporary YAML file with the include_rules section
 		tempConfig := processor.Config{}
@@ -196,7 +213,7 @@ func validateConfiguration(configPath string, debug bool, includeRulePatterns st
 		log.Printf("Processing additional rule files from command line: %s\n", includeRulePatterns)
 
 		// Parse comma-separated list of rule files
-		additionalRules := strings.Split(includeRulePatterns, ",")
+		additionalRules := parseIncludeRulePatterns(includeRulePatterns)
 
 		// Create a temporary YAML file with the include_rules section
 		tempConfig := processor.Config{}

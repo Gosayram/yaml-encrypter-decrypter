@@ -667,6 +667,40 @@ encryption:
 	}
 }
 
+func TestLoadRulesFailsForMissingExplicitIncludedFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yml")
+	configContent := `encryption:
+  include_rules:
+    - "missing-rules.yml"
+`
+
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write config: %v", err)
+	}
+
+	_, _, err := loadRules(configPath, false)
+	if err == nil {
+		t.Fatal("expected error for missing explicit include file, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to load included rules from file") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadAdditionalRulesFailsForMissingExplicitFile(t *testing.T) {
+	cfg := &Config{}
+	cfg.Encryption.IncludeRules = []string{"missing-rules.yml"}
+
+	_, _, err := LoadAdditionalRules(cfg, t.TempDir(), false)
+	if err == nil {
+		t.Fatal("expected error for missing explicit include file, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to load additional rules from file") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestProcessFileErrors(t *testing.T) {
 	// Use a strong password that meets security requirements
 	strongPassword := "S9f&h27!Gp*3K5^LmZ#qR8@tUvWxYz"
