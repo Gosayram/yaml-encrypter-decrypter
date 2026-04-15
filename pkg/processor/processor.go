@@ -333,11 +333,12 @@ func debugLog(debug bool, format string, args ...interface{}) {
 // maskEncryptedValue masks the encrypted value
 func maskEncryptedValue(value string, debug bool, fieldPath ...string) string {
 	if !strings.HasPrefix(value, AES) {
+		lowered := strings.ToLower(value)
 		// Protect sensitive data
 		if len(value) > MinEncryptedLength &&
-			(strings.Contains(strings.ToLower(value), "password") ||
-				strings.Contains(strings.ToLower(value), "key") ||
-				strings.Contains(value, "YED_ENCRYPTION_KEY")) {
+			(strings.Contains(lowered, "password") ||
+				strings.Contains(lowered, "key") ||
+				strings.Contains(lowered, "yed_encryption_key")) {
 			return MaskedValue
 		}
 		return value
@@ -693,7 +694,7 @@ func processScalarNodeWithExclusions(node *yaml.Node, path string, key, operatio
 	}
 
 	// Mark as processed
-	processedPaths[path] = true
+	markProcessedPath(processedPaths, path)
 
 	// Check whether any rule applies before doing style-specific processing.
 	ruleName, canApply := processRules(path, rules, debug)
@@ -1399,7 +1400,7 @@ func ShowDiff(filePath, key, operation string, debug bool, configPath string) er
 	// Log unsecureDiff value for debugging purposes
 	debugLog(debug, "Loaded unsecureDiff value from config: %v", config.Encryption.UnsecureDiff)
 
-	showDiff(&node, key, operation, config.Encryption.UnsecureDiff, debug, configPath)
+	showDiff(&node, key, operation, config.Encryption.UnsecureDiff, debug, config.Encryption.Rules)
 	return nil
 }
 
@@ -2042,7 +2043,7 @@ func processMultilineStyleNode(node *yaml.Node, path string, key, operation stri
 	if processed {
 		debugLog(debug, "Multiline node at path %s was processed successfully", path)
 		// Mark path as processed
-		processedPaths[path] = true
+		markProcessedPath(processedPaths, path)
 		return nil
 	}
 	return nil
@@ -2079,7 +2080,7 @@ func encryptScalarNode(node *yaml.Node, path string, key string, processedPaths 
 	node.Style = 0 // Always set plain style for encrypted values
 
 	// Mark path as processed
-	processedPaths[path] = true
+	markProcessedPath(processedPaths, path)
 	return nil
 }
 
@@ -2138,7 +2139,7 @@ func decryptScalarNode(node *yaml.Node, path string, key string, processedPaths 
 	applyNodeStyle(node, styleInfo, debug)
 
 	// Mark path as processed
-	processedPaths[path] = true
+	markProcessedPath(processedPaths, path)
 	return nil
 }
 
@@ -2190,13 +2191,11 @@ func deepCopyNode(node *yaml.Node) *yaml.Node {
 }
 
 // showDiff displays differences between original and encrypted values
-func showDiff(data *yaml.Node, key, operation string, unsecureDiff bool, debug bool, configPath string) {
+func showDiff(data *yaml.Node, key, operation string, unsecureDiff bool, debug bool, rules []Rule) {
 	if data == nil || len(data.Content) == 0 {
 		debugLog(debug, "showDiff: data is nil or empty")
 		return
 	}
-
-	debugLog(debug, "[showDiff] Config path is: '%s', type: %T", configPath, configPath)
 
 	// Setting global variable for masking in logs
 	unsecureDiffLog.Store(unsecureDiff)
@@ -2215,13 +2214,6 @@ func showDiff(data *yaml.Node, key, operation string, unsecureDiff bool, debug b
 	debugLog(debug, "Original data content length: %d", len(originalData.Content))
 	debugLog(debug, "Encrypted data content length: %d", len(encryptedData.Content))
 
-	// Load rules
-	rules, _, err := loadRules(configPath, debug)
-	if err != nil {
-		debugLog(debug, "Error loading rules: %v", err)
-		return
-	}
-
 	if len(rules) == 0 {
 		debugLog(debug, "No rules defined, no encryption will be performed")
 		return
@@ -2229,7 +2221,7 @@ func showDiff(data *yaml.Node, key, operation string, unsecureDiff bool, debug b
 
 	// Process original data
 	debugLog(debug, "Processing original data")
-	processNodeForDiff(originalData.Content[0], key, operation, true, debug, configPath)
+	processNodeForDiff(originalData.Content[0], key, operation, true, debug)
 
 	// Process encrypted data
 	debugLog(debug, "Processing encrypted data")
@@ -2264,7 +2256,7 @@ func showDiff(data *yaml.Node, key, operation string, unsecureDiff bool, debug b
 }
 
 // processScalarNodeForDiff processes a scalar node for displaying differences
-func processScalarNodeForDiff(node *yaml.Node, key, operation string, isOriginal bool, debug bool, configPath string) {
+func processScalarNodeForDiff(node *yaml.Node, key, operation string, isOriginal bool, debug bool) {
 	// Create secure buffers for sensitive data
 	keyBuf := memguard.NewBufferFromBytes([]byte(key))
 	if keyBuf == nil {
@@ -2375,29 +2367,29 @@ func isSensitiveValue(value string) bool {
 }
 
 // processSequenceNodeForDiff processes a sequence node for displaying differences
-func processSequenceNodeForDiff(node *yaml.Node, key, operation string, isOriginal bool, debug bool, configPath string) {
+func processSequenceNodeForDiff(node *yaml.Node, key, operation string, isOriginal bool, debug bool) {
 	debugLog(debug, "processNodeForDiff: Processing sequence node with %d items", len(node.Content))
 	for i, child := range node.Content {
 		debugLog(debug, "processNodeForDiff: Processing sequence item %d", i)
-		processNodeForDiff(child, key, operation, isOriginal, debug, configPath)
+		processNodeForDiff(child, key, operation, isOriginal, debug)
 	}
 }
 
 // processMappingNodeForDiff processes a mapping node for displaying differences
-func processMappingNodeForDiff(node *yaml.Node, key, operation string, isOriginal bool, debug bool, configPath string) {
+func processMappingNodeForDiff(node *yaml.Node, key, operation string, isOriginal bool, debug bool) {
 	debugLog(debug, "processNodeForDiff: Processing mapping node with %d pairs", len(node.Content)/KeyValuePairSize)
 	for i := 0; i < len(node.Content); i += 2 {
 		if i+1 < len(node.Content) {
 			keyNode := node.Content[i]
 			valueNode := node.Content[i+1]
 			debugLog(debug, "processNodeForDiff: Processing mapping pair with key: '%s'", keyNode.Value)
-			processNodeForDiff(valueNode, key, operation, isOriginal, debug, configPath)
+			processNodeForDiff(valueNode, key, operation, isOriginal, debug)
 		}
 	}
 }
 
 // processNodeForDiff processes a node for displaying differences
-func processNodeForDiff(node *yaml.Node, key, operation string, isOriginal bool, debug bool, configPath string) {
+func processNodeForDiff(node *yaml.Node, key, operation string, isOriginal bool, debug bool) {
 	if node == nil {
 		debugLog(debug, "processNodeForDiff: received nil node")
 		return
@@ -2407,11 +2399,11 @@ func processNodeForDiff(node *yaml.Node, key, operation string, isOriginal bool,
 
 	switch node.Kind {
 	case yaml.ScalarNode:
-		processScalarNodeForDiff(node, key, operation, isOriginal, debug, configPath)
+		processScalarNodeForDiff(node, key, operation, isOriginal, debug)
 	case yaml.SequenceNode:
-		processSequenceNodeForDiff(node, key, operation, isOriginal, debug, configPath)
+		processSequenceNodeForDiff(node, key, operation, isOriginal, debug)
 	case yaml.MappingNode:
-		processMappingNodeForDiff(node, key, operation, isOriginal, debug, configPath)
+		processMappingNodeForDiff(node, key, operation, isOriginal, debug)
 	default:
 		debugLog(debug, "processNodeForDiff: Unsupported node kind: %v", node.Kind)
 	}
@@ -2478,9 +2470,19 @@ func printScalarDiff(original, processed *yaml.Node, debug bool, unsecureDiff bo
 		return
 	}
 
-	// Mask sensitive values in the output if not in unsecure mode
-	if !unsecureDiff && strings.HasPrefix(processedValue, AES) {
-		processedValue = maskEncryptedValue(processedValue, debug, path)
+	// Mask sensitive values in the output if not in unsecure mode.
+	if !unsecureDiff {
+		if strings.HasPrefix(originalValue, AES) {
+			originalValue = maskEncryptedValue(originalValue, debug, path)
+		} else if isSensitiveValue(originalValue) {
+			originalValue = MaskedValue
+		}
+
+		if strings.HasPrefix(processedValue, AES) {
+			processedValue = maskEncryptedValue(processedValue, debug, path)
+		} else if isSensitiveValue(processedValue) {
+			processedValue = MaskedValue
+		}
 	}
 
 	// Show the difference
@@ -2629,13 +2631,13 @@ func processScalarNodeWithRuleExclusions(node *yaml.Node, key, operation string,
 
 		// If the node was processed as multiline, mark it and return
 		if processed {
-			processedPaths[currentPath] = true
+			markProcessedPath(processedPaths, currentPath)
 			debugLog(debug, "Successfully processed multiline node at path %s", currentPath)
 			return nil
 		}
 
 		// Standard processing for regular nodes
-		processedPaths[currentPath] = true
+		markProcessedPath(processedPaths, currentPath)
 
 		switch operation {
 		case OperationEncrypt:
@@ -2705,11 +2707,16 @@ func processDecryptionWithExclusions(node *yaml.Node, key, currentPath string, p
 		applyNodeStyle(node, 0, debug)
 
 		// Mark path as processed
-		if processedPaths != nil {
-			processedPaths[currentPath] = true
-		}
+		markProcessedPath(processedPaths, currentPath)
 	}
 	return nil
+}
+
+func markProcessedPath(processedPaths map[string]bool, path string) {
+	if processedPaths == nil {
+		return
+	}
+	processedPaths[path] = true
 }
 
 // decryptNodeValue decrypts a scalar node value

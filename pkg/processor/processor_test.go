@@ -283,6 +283,21 @@ func TestSetKeyDerivationAlgorithmRejectsInvalidInput(t *testing.T) {
 	}
 }
 
+func TestEncryptScalarNodeHandlesNilProcessedPaths(t *testing.T) {
+	node := &yaml.Node{
+		Kind:  yaml.ScalarNode,
+		Value: "plain-secret",
+	}
+
+	err := encryptScalarNode(node, "config.password", "S9f&h27!Gp*3K5^LmZ#qR8@tUvWxYz", nil, false)
+	if err != nil {
+		t.Fatalf("encryptScalarNode() unexpected error: %v", err)
+	}
+	if !strings.HasPrefix(node.Value, AES) {
+		t.Fatalf("expected encrypted value with %q prefix, got: %s", AES, node.Value)
+	}
+}
+
 func BenchmarkProcessFile(b *testing.B) {
 	// Create temporary config file
 	configContent := `encryption:
@@ -411,6 +426,13 @@ func TestMaskEncryptedValueCore(t *testing.T) {
 			debug:    false,
 			path:     "",
 			expected: "plaintext",
+		},
+		{
+			name:     "non-encrypted yed key lowercase",
+			value:    "token=yed_encryption_key",
+			debug:    false,
+			path:     "",
+			expected: MaskedValue,
 		},
 		{
 			name:     "empty value",
@@ -3186,7 +3208,6 @@ func TestProcessSequenceNodeForDiff(t *testing.T) {
 	// Create test key
 	key := "S9f&h27!Gp*3K5^LmZ#qR8@tUvWxYz"
 	operation := OperationEncrypt
-	configPath := "test-config.yaml"
 
 	// Create a test sequence node with scalar children
 	sequenceNode := &yaml.Node{
@@ -3202,7 +3223,7 @@ func TestProcessSequenceNodeForDiff(t *testing.T) {
 	originalNode := deepCopyNode(sequenceNode)
 
 	// Process the node for diff
-	processSequenceNodeForDiff(sequenceNode, key, operation, false, true, configPath)
+	processSequenceNodeForDiff(sequenceNode, key, operation, false, true)
 
 	// Verify all items were processed
 	for i, item := range sequenceNode.Content {
@@ -3213,7 +3234,7 @@ func TestProcessSequenceNodeForDiff(t *testing.T) {
 
 	// Test with isOriginal=true (should not modify the items)
 	sequenceNode = deepCopyNode(originalNode)
-	processSequenceNodeForDiff(sequenceNode, key, operation, true, true, configPath)
+	processSequenceNodeForDiff(sequenceNode, key, operation, true, true)
 
 	// Verify no items were modified
 	for i, item := range sequenceNode.Content {
@@ -3245,7 +3266,7 @@ func TestProcessSequenceNodeForDiff(t *testing.T) {
 	}
 
 	// Process with nested elements
-	processSequenceNodeForDiff(nestedSequence, key, operation, false, true, configPath)
+	processSequenceNodeForDiff(nestedSequence, key, operation, false, true)
 
 	// Verify all items were processed including nested ones
 	if !strings.HasPrefix(nestedSequence.Content[0].Value, AES) {
@@ -3331,6 +3352,72 @@ func TestPrintSequenceDiff(t *testing.T) {
 
 	// Call with different length sequences (must not panic).
 	printSequenceDiff(shortOriginal, processed, true, false, "test.path")
+}
+
+func TestPrintScalarDiffMasksOriginalSensitiveValueInSecureMode(t *testing.T) {
+	original := &yaml.Node{
+		Kind:  yaml.ScalarNode,
+		Value: "supersecretvalue",
+		Line:  10,
+	}
+	processed := &yaml.Node{
+		Kind:  yaml.ScalarNode,
+		Value: AES + "abcdefghijklmnopqrstuvwxyz",
+		Line:  10,
+	}
+
+	var buf bytes.Buffer
+	SetDiffOutput(&buf)
+	defer SetDiffOutput(nil)
+
+	printScalarDiff(original, processed, false, false, "config.password")
+	secureOutput := buf.String()
+	if !strings.Contains(secureOutput, MaskedValue) {
+		t.Fatalf("expected secure diff to mask original sensitive value, got: %s", secureOutput)
+	}
+	if strings.Contains(secureOutput, "supersecretvalue") {
+		t.Fatalf("expected secure diff to hide original value, got: %s", secureOutput)
+	}
+
+	buf.Reset()
+	printScalarDiff(original, processed, false, true, "config.password")
+	unsecureOutput := buf.String()
+	if !strings.Contains(unsecureOutput, "supersecretvalue") {
+		t.Fatalf("expected unsecure diff to show original value, got: %s", unsecureOutput)
+	}
+}
+
+func TestPrintScalarDiffMasksProcessedSensitiveValueInSecureModeForDecrypt(t *testing.T) {
+	original := &yaml.Node{
+		Kind:  yaml.ScalarNode,
+		Value: AES + "abcdefghijklmnopqrstuvwxyz",
+		Line:  11,
+	}
+	processed := &yaml.Node{
+		Kind:  yaml.ScalarNode,
+		Value: "decrypted-super-secret",
+		Line:  11,
+	}
+
+	var buf bytes.Buffer
+	SetDiffOutput(&buf)
+	defer SetDiffOutput(nil)
+
+	printScalarDiff(original, processed, false, false, "config.password")
+	secureOutput := buf.String()
+	if strings.Contains(secureOutput, "decrypted-super-secret") {
+		t.Fatalf("expected secure diff to hide processed plaintext, got: %s", secureOutput)
+	}
+	if !strings.Contains(secureOutput, MaskedValue) {
+		t.Fatalf("expected secure diff to include masked marker, got: %s", secureOutput)
+	}
+
+	buf.Reset()
+	printScalarDiff(original, processed, false, true, "config.password")
+	unsecureOutput := buf.String()
+	if !strings.Contains(unsecureOutput, "decrypted-super-secret") {
+		t.Fatalf("expected unsecure diff to show processed plaintext, got: %s", unsecureOutput)
+	}
 }
 
 // TestProcessSequenceNodeWithRuleExclusions tests the processSequenceNodeWithRuleExclusions function
