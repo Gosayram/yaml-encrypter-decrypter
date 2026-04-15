@@ -1703,6 +1703,36 @@ password: supersecret
 			},
 			wantError: true,
 		},
+		{
+			name: "invalid_operation",
+			content: `
+email: user@example.com
+password: supersecret
+`,
+			config: Config{
+				Key:       "S9f&h27!Gp*3K5^LmZ#qR8@tUvWxYz",
+				Debug:     false,
+				Operation: "invalid",
+				Encryption: struct {
+					Rules         []Rule   `yaml:"rules"`
+					UnsecureDiff  bool     `yaml:"unsecure_diff"`
+					IncludeRules  []string `yaml:"include_rules,omitempty"`
+					ValidateRules *bool    `yaml:"validate_rules,omitempty"`
+				}{
+					IncludeRules:  []string{},
+					ValidateRules: func() *bool { b := true; return &b }(),
+					Rules: []Rule{
+						{
+							Name:    "test_rule",
+							Block:   "*",
+							Pattern: "**",
+							Action:  "encrypt",
+						},
+					},
+				},
+			},
+			wantError: true,
+		},
 	}
 
 	for _, tt := range tests {

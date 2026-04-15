@@ -2761,6 +2761,9 @@ func ProcessDiff(content []byte, config Config) error {
 	if err != nil {
 		return fmt.Errorf("error processing YAML content: %w", err)
 	}
+	if len(originalData.Content) == 0 || len(processedNode.Content) == 0 {
+		return fmt.Errorf("invalid YAML document structure for diff")
+	}
 
 	// Output differences
 	debugLog(config.Debug, "Printing differences")
