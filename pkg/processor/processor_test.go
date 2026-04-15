@@ -1829,6 +1829,120 @@ func TestRenderScalarReplacementPreservesBlockIndicator(t *testing.T) {
 	}
 }
 
+func TestFindDoubleQuotedEndEscaping(t *testing.T) {
+	tests := []struct {
+		name     string
+		prefix   string
+		suffix   string
+		expected int
+	}{
+		{
+			name:     "escaped quotes inside value",
+			prefix:   "\"a \\\"b\\\" c\"",
+			suffix:   " # trailing",
+			expected: len("\"a \\\"b\\\" c\""),
+		},
+		{
+			name:     "even backslashes before closing quote terminates",
+			prefix:   "\"abc\\\\\"",
+			suffix:   " # trailing",
+			expected: len("\"abc\\\\\""),
+		},
+		{
+			name:     "odd backslashes escape inner quote",
+			prefix:   "\"abc\\\\\\\"def\"",
+			suffix:   " # trailing",
+			expected: len("\"abc\\\\\\\"def\""),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			line := tt.prefix + tt.suffix
+			got := findDoubleQuotedEnd(line, 0)
+			if got != tt.expected {
+				t.Fatalf("findDoubleQuotedEnd() = %d, want %d (line: %q)", got, tt.expected, line)
+			}
+		})
+	}
+}
+
+func TestApplyScalarEditsToOriginalContentGoldenFormatting(t *testing.T) {
+	tests := []struct {
+		name     string
+		original string
+		mutate   func(t *testing.T, doc *yaml.Node)
+		expected string
+	}{
+		{
+			name: "preserves literal chomping and inline comment",
+			original: "desc: |+\n" +
+				"  old line 1\n" +
+				"  old line 2\n" +
+				"\n" +
+				"note: old # keep comment\n",
+			mutate: func(t *testing.T, doc *yaml.Node) {
+				t.Helper()
+				root := doc.Content[0]
+				desc := findValueInMapping(root, "desc")
+				note := findValueInMapping(root, "note")
+				if desc == nil || note == nil {
+					t.Fatalf("failed to find nodes for mutation")
+				}
+				desc.Value = "new line 1\nnew line 2\n\n"
+				note.Value = "updated"
+			},
+			expected: "desc: |+\n" +
+				"  new line 1\n" +
+				"  new line 2\n" +
+				"\n" +
+				"note: updated # keep comment\n",
+		},
+		{
+			name: "preserves folded strip indicator",
+			original: "summary: >-\n" +
+				"  old line 1\n" +
+				"  old line 2\n" +
+				"meta: keep\n",
+			mutate: func(t *testing.T, doc *yaml.Node) {
+				t.Helper()
+				root := doc.Content[0]
+				summary := findValueInMapping(root, "summary")
+				if summary == nil {
+					t.Fatalf("failed to find summary node")
+				}
+				summary.Value = "new line 1\nnew line 2\n"
+			},
+			expected: "summary: >-\n" +
+				"  new line 1\n" +
+				"  new line 2\n" +
+				"meta: keep\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var doc yaml.Node
+			decoder := yaml.NewDecoder(strings.NewReader(tt.original))
+			if err := decoder.Decode(&doc); err != nil {
+				t.Fatalf("failed to parse source YAML: %v", err)
+			}
+
+			processed := deepCopyNode(&doc)
+			tt.mutate(t, processed)
+
+			got, err := applyScalarEditsToOriginalContent([]byte(tt.original), processed)
+			if err != nil {
+				t.Fatalf("applyScalarEditsToOriginalContent() error: %v", err)
+			}
+
+			if string(got) != tt.expected {
+				t.Fatalf("golden mismatch\nexpected:\n%s\ngot:\n%s", tt.expected, string(got))
+			}
+		})
+	}
+}
+
 func TestShowDiff(t *testing.T) {
 	// Create temporary directory for test files
 	tmpDir := t.TempDir()

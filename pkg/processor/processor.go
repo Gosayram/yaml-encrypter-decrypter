@@ -680,7 +680,7 @@ func processScalarNodeWithExclusions(node *yaml.Node, path string, key, operatio
 	processedPaths[path] = true
 
 	// Check whether any rule applies before doing style-specific processing.
-	_, canApply := processRules(path, rules, debug)
+	ruleName, canApply := processRules(path, rules, debug)
 	if !canApply {
 		debugLog(debug, "No rules apply to path: %s", path)
 		return nil
@@ -699,11 +699,16 @@ func processScalarNodeWithExclusions(node *yaml.Node, path string, key, operatio
 	}
 
 	// Continue with standard node processing for regular scalars.
-	return processScalarNodeStandard(node, path, operation, key, rules, debug)
+	return processScalarNodeStandardWithRule(node, path, operation, key, ruleName, canApply, debug)
 }
 
 // processScalarNodeStandard processes a scalar node for encryption or decryption
 func processScalarNodeStandard(node *yaml.Node, path string, operation string, key string, rules []Rule, debug bool) error {
+	ruleName, canApply := processRules(path, rules, debug)
+	return processScalarNodeStandardWithRule(node, path, operation, key, ruleName, canApply, debug)
+}
+
+func processScalarNodeStandardWithRule(node *yaml.Node, path string, operation string, key string, ruleName string, canApply bool, debug bool) error {
 	// Check for valid operation
 	if operation != OperationEncrypt && operation != OperationDecrypt {
 		return fmt.Errorf("invalid operation: %s", operation)
@@ -714,8 +719,6 @@ func processScalarNodeStandard(node *yaml.Node, path string, operation string, k
 		return fmt.Errorf("key is too weak: length should be at least %d characters", MinKeyLengthStandard)
 	}
 
-	// Get rule to apply
-	ruleName, canApply := processRules(path, rules, debug)
 	if !canApply {
 		debugLog(debug, "No rules apply to path: %s", path)
 		return nil
@@ -1004,11 +1007,24 @@ func locateInlineScalarEnd(node *yaml.Node, line string, start int) int {
 
 func findDoubleQuotedEnd(line string, start int) int {
 	for i := start + 1; i < len(line); i++ {
-		if line[i] == '"' && line[i-1] != '\\' {
+		if line[i] == '"' && !isEscapedInDoubleQuoted(line, i) {
 			return i + 1
 		}
 	}
 	return len(line)
+}
+
+func isEscapedInDoubleQuoted(line string, quotePos int) bool {
+	if quotePos <= 0 || quotePos >= len(line) {
+		return false
+	}
+
+	backslashes := 0
+	for i := quotePos - 1; i >= 0 && line[i] == '\\'; i-- {
+		backslashes++
+	}
+
+	return backslashes%2 == 1
 }
 
 func findSingleQuotedEnd(line string, start int) int {
@@ -1050,17 +1066,18 @@ func renderScalarReplacement(originalNode, processedNode *yaml.Node, lines []str
 	if originalStyle == yaml.LiteralStyle || originalStyle == yaml.FoldedStyle {
 		indicator := defaultBlockScalarIndicator(originalStyle)
 		indicator = extractBlockScalarIndicator(originalNode, lines, indicator)
+		trailingNewlines := countTrailingNewlines(value)
 
 		headerLine := lines[originalNode.Line-1]
 		contentIndent := strings.Repeat(" ", leadingSpaces(headerLine)+2)
-		lines := strings.Split(strings.TrimSuffix(value, "\n"), "\n")
+		lines := strings.Split(strings.TrimRight(value, "\n"), "\n")
 		if len(lines) == 1 && lines[0] == "" {
 			return indicator
 		}
 		for i := range lines {
 			lines[i] = contentIndent + lines[i]
 		}
-		return indicator + "\n" + strings.Join(lines, "\n") + "\n"
+		return indicator + "\n" + strings.Join(lines, "\n") + blockScalarTerminator(indicator, trailingNewlines)
 	}
 
 	inlineStyle := processedNode.Style
@@ -1107,6 +1124,26 @@ func extractBlockScalarIndicator(node *yaml.Node, lines []string, fallback strin
 		return fallback
 	}
 	return indicator
+}
+
+func countTrailingNewlines(value string) int {
+	count := 0
+	for i := len(value) - 1; i >= 0; i-- {
+		if value[i] != '\n' {
+			break
+		}
+		count++
+	}
+	return count
+}
+
+func blockScalarTerminator(indicator string, trailingNewlines int) string {
+	// Always keep at least one line break to separate from following YAML tokens.
+	newlines := 1
+	if strings.Contains(indicator, "+") && trailingNewlines > 0 {
+		newlines = trailingNewlines
+	}
+	return strings.Repeat("\n", newlines)
 }
 
 func renderInlineScalar(value string, style yaml.Style) string {
