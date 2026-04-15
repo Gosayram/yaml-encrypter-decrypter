@@ -16,7 +16,7 @@ func TestValidateAlgorithm(t *testing.T) {
 		{
 			name:      "empty algorithm string returns default",
 			algorithm: "",
-			expected:  DefaultKeyDerivationAlgorithm,
+			expected:  GetDefaultAlgorithm(),
 		},
 		{
 			name:      "argon2id lowercase",

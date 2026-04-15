@@ -1715,6 +1715,90 @@ password: supersecret
 	}
 }
 
+func TestProcessDiffRespectsDecryptOperation(t *testing.T) {
+	key := "S9f&h27!Gp*3K5^LmZ#qR8@tUvWxYz"
+	encrypted, err := encryption.Encrypt(key, "supersecret")
+	if err != nil {
+		t.Fatalf("failed to encrypt test value: %v", err)
+	}
+
+	content := []byte(fmt.Sprintf("password: %s%s\n", AES, encrypted))
+	cfg := Config{
+		Key:       key,
+		Operation: OperationDecrypt,
+		Encryption: struct {
+			Rules         []Rule   `yaml:"rules"`
+			UnsecureDiff  bool     `yaml:"unsecure_diff"`
+			IncludeRules  []string `yaml:"include_rules,omitempty"`
+			ValidateRules *bool    `yaml:"validate_rules,omitempty"`
+		}{
+			Rules: []Rule{
+				{
+					Name:    "decrypt_password",
+					Block:   "*",
+					Pattern: "password",
+					Action:  "encrypt",
+				},
+			},
+		},
+	}
+
+	var diff bytes.Buffer
+	SetDiffOutput(&diff)
+	defer SetDiffOutput(nil)
+
+	if err := ProcessDiff(content, cfg); err != nil {
+		t.Fatalf("ProcessDiff() unexpected error: %v", err)
+	}
+
+	if !strings.Contains(diff.String(), "+ supersecret") {
+		t.Fatalf("expected decrypted value in diff output, got: %s", diff.String())
+	}
+}
+
+func TestRenderScalarReplacementPreservesBlockIndicator(t *testing.T) {
+	tests := []struct {
+		name      string
+		header    string
+		style     yaml.Style
+		wantStart string
+	}{
+		{
+			name:      "literal keep",
+			header:    "value: |+",
+			style:     yaml.LiteralStyle,
+			wantStart: "|+\n",
+		},
+		{
+			name:      "folded strip",
+			header:    "value: >-",
+			style:     yaml.FoldedStyle,
+			wantStart: ">-\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			original := &yaml.Node{
+				Kind:   yaml.ScalarNode,
+				Style:  tt.style,
+				Line:   1,
+				Column: 8,
+			}
+			processed := &yaml.Node{
+				Kind:  yaml.ScalarNode,
+				Style: tt.style,
+				Value: "line1\nline2\n",
+			}
+
+			got := renderScalarReplacement(original, processed, []string{tt.header})
+			if !strings.HasPrefix(got, tt.wantStart) {
+				t.Fatalf("renderScalarReplacement() prefix = %q, want prefix %q", got, tt.wantStart)
+			}
+		})
+	}
+}
+
 func TestShowDiff(t *testing.T) {
 	// Create temporary directory for test files
 	tmpDir := t.TempDir()

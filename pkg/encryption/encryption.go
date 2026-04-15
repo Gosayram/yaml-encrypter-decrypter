@@ -97,7 +97,7 @@ var (
 // Global variables
 var (
 	debugMode                     bool                   = false
-	DefaultKeyDerivationAlgorithm KeyDerivationAlgorithm = Argon2idAlgorithm
+	defaultKeyDerivationAlgorithm KeyDerivationAlgorithm = Argon2idAlgorithm
 	defaultAlgorithmMu            sync.RWMutex
 )
 
@@ -487,13 +487,18 @@ func decompress(compressedData []byte) ([]byte, error) {
 func SetDefaultAlgorithm(algorithm KeyDerivationAlgorithm) {
 	defaultAlgorithmMu.Lock()
 	defer defaultAlgorithmMu.Unlock()
-	DefaultKeyDerivationAlgorithm = algorithm
+	defaultKeyDerivationAlgorithm = algorithm
 }
 
 func getDefaultAlgorithm() KeyDerivationAlgorithm {
 	defaultAlgorithmMu.RLock()
 	defer defaultAlgorithmMu.RUnlock()
-	return DefaultKeyDerivationAlgorithm
+	return defaultKeyDerivationAlgorithm
+}
+
+// GetDefaultAlgorithm returns the current default key derivation algorithm.
+func GetDefaultAlgorithm() KeyDerivationAlgorithm {
+	return getDefaultAlgorithm()
 }
 
 // GetAvailableKeyDerivationAlgorithms returns the list of available key derivation algorithms

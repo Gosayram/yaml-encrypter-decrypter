@@ -1048,10 +1048,8 @@ func renderScalarReplacement(originalNode, processedNode *yaml.Node, lines []str
 	value := processedNode.Value
 
 	if originalStyle == yaml.LiteralStyle || originalStyle == yaml.FoldedStyle {
-		indicator := "|-"
-		if originalStyle == yaml.FoldedStyle {
-			indicator = ">-"
-		}
+		indicator := defaultBlockScalarIndicator(originalStyle)
+		indicator = extractBlockScalarIndicator(originalNode, lines, indicator)
 
 		headerLine := lines[originalNode.Line-1]
 		contentIndent := strings.Repeat(" ", leadingSpaces(headerLine)+2)
@@ -1070,6 +1068,45 @@ func renderScalarReplacement(originalNode, processedNode *yaml.Node, lines []str
 		inlineStyle = originalStyle
 	}
 	return renderInlineScalar(value, inlineStyle)
+}
+
+func defaultBlockScalarIndicator(style yaml.Style) string {
+	if style == yaml.FoldedStyle {
+		return ">"
+	}
+	return "|"
+}
+
+func extractBlockScalarIndicator(node *yaml.Node, lines []string, fallback string) string {
+	if node == nil || node.Line <= 0 || node.Line > len(lines) {
+		return fallback
+	}
+
+	headerLine := lines[node.Line-1]
+	start := byteIndexAtColumn(headerLine, node.Column)
+	if start < 0 || start >= len(headerLine) {
+		return fallback
+	}
+
+	if headerLine[start] != '|' && headerLine[start] != '>' {
+		return fallback
+	}
+
+	end := start + 1
+	for end < len(headerLine) {
+		ch := headerLine[end]
+		if (ch >= '0' && ch <= '9') || ch == '+' || ch == '-' {
+			end++
+			continue
+		}
+		break
+	}
+
+	indicator := headerLine[start:end]
+	if indicator == "" {
+		return fallback
+	}
+	return indicator
 }
 
 func renderInlineScalar(value string, style yaml.Style) string {
@@ -2704,6 +2741,14 @@ func LoadRules(configFile string, debug bool) ([]Rule, *Config, error) {
 func ProcessDiff(content []byte, config Config) error {
 	debugLog(config.Debug, "Processing diff")
 
+	operation := config.Operation
+	if operation == "" {
+		operation = OperationEncrypt
+	}
+	if operation != OperationEncrypt && operation != OperationDecrypt {
+		return fmt.Errorf("invalid operation for diff: %s", operation)
+	}
+
 	// Parse original YAML
 	var originalData yaml.Node
 	if err := yaml.Unmarshal(content, &originalData); err != nil {
@@ -2712,7 +2757,7 @@ func ProcessDiff(content []byte, config Config) error {
 
 	// Process content with the same pipeline used by file processing.
 	processedPaths := make(map[string]bool)
-	processedNode, err := processYAMLContent(content, config.Key, OperationEncrypt, config.Encryption.Rules, processedPaths, config.Debug)
+	processedNode, err := processYAMLContent(content, config.Key, operation, config.Encryption.Rules, processedPaths, config.Debug)
 	if err != nil {
 		return fmt.Errorf("error processing YAML content: %w", err)
 	}

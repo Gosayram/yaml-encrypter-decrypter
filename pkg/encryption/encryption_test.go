@@ -751,35 +751,35 @@ func TestGetAvailableKeyDerivationAlgorithms(t *testing.T) {
 // TestSetDefaultAlgorithm tests the SetDefaultAlgorithm function
 func TestSetDefaultAlgorithm(t *testing.T) {
 	// Save the original default to restore it later
-	originalDefault := DefaultKeyDerivationAlgorithm
+	originalDefault := GetDefaultAlgorithm()
 	defer func() {
-		DefaultKeyDerivationAlgorithm = originalDefault
+		SetDefaultAlgorithm(originalDefault)
 	}()
 
 	// Set a different algorithm as default
 	SetDefaultAlgorithm(PBKDF2SHA256Algorithm)
 
 	// Check that the default was updated
-	if DefaultKeyDerivationAlgorithm != PBKDF2SHA256Algorithm {
+	if GetDefaultAlgorithm() != PBKDF2SHA256Algorithm {
 		t.Errorf("Default algorithm not updated, got %s, want %s",
-			DefaultKeyDerivationAlgorithm, PBKDF2SHA256Algorithm)
+			GetDefaultAlgorithm(), PBKDF2SHA256Algorithm)
 	}
 
 	// Set another algorithm
 	SetDefaultAlgorithm(PBKDF2SHA512Algorithm)
 
 	// Check that the default was updated again
-	if DefaultKeyDerivationAlgorithm != PBKDF2SHA512Algorithm {
+	if GetDefaultAlgorithm() != PBKDF2SHA512Algorithm {
 		t.Errorf("Default algorithm not updated, got %s, want %s",
-			DefaultKeyDerivationAlgorithm, PBKDF2SHA512Algorithm)
+			GetDefaultAlgorithm(), PBKDF2SHA512Algorithm)
 	}
 
 	// Restore the original default which should be Argon2id
 	SetDefaultAlgorithm(Argon2idAlgorithm)
 
 	// Check that we're back to the original
-	if DefaultKeyDerivationAlgorithm != Argon2idAlgorithm {
+	if GetDefaultAlgorithm() != Argon2idAlgorithm {
 		t.Errorf("Default algorithm not restored, got %s, want %s",
-			DefaultKeyDerivationAlgorithm, Argon2idAlgorithm)
+			GetDefaultAlgorithm(), Argon2idAlgorithm)
 	}
 }

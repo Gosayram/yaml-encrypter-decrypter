@@ -107,22 +107,43 @@ check-rules: build prepare-test-examples ## Test rules against example YAML file
 prepare-test-examples: ## Create example files under .test/examples when missing
 	@echo "Preparing test examples..."
 	@mkdir -p .test/examples
-	@# Check if example files exist, if not create them
+	@# Check if example files exist, if not create valid YAML fixtures
 	@if [ ! -f .test/examples/database_example.yml ]; then \
 		echo "Creating database example file..."; \
-		touch .test/examples/database_example.yml; \
+		printf '%s\n' \
+			'database:' \
+			'  host: localhost' \
+			'  port: 5432' \
+			'  username: admin' \
+			'  password: supersecret' \
+			> .test/examples/database_example.yml; \
 	fi
 	@if [ ! -f .test/examples/api_example.yml ]; then \
 		echo "Creating API example file..."; \
-		touch .test/examples/api_example.yml; \
+		printf '%s\n' \
+			'api:' \
+			'  endpoint: https://api.example.com' \
+			'  token: my-token' \
+			'  timeout: 30' \
+			> .test/examples/api_example.yml; \
 	fi
 	@if [ ! -f .test/examples/aws_example.yml ]; then \
 		echo "Creating AWS example file..."; \
-		touch .test/examples/aws_example.yml; \
+		printf '%s\n' \
+			'aws:' \
+			'  access_key_id: AKIAEXAMPLE' \
+			'  secret_access_key: supersecret' \
+			'  region: us-east-1' \
+			> .test/examples/aws_example.yml; \
 	fi
 	@if [ ! -f .test/examples/secrets_example.yml ]; then \
 		echo "Creating secrets example file..."; \
-		touch .test/examples/secrets_example.yml; \
+		printf '%s\n' \
+			'secrets:' \
+			'  database_password: supersecret' \
+			'  api_key: abc123' \
+			'  token: my-token' \
+			> .test/examples/secrets_example.yml; \
 	fi
 
 # Test all rule configurations together
