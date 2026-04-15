@@ -701,6 +701,41 @@ func TestLoadAdditionalRulesFailsForMissingExplicitFile(t *testing.T) {
 	}
 }
 
+func TestResolveIncludePattern(t *testing.T) {
+	baseDir := filepath.Join("tmp", "cfg")
+
+	tests := []struct {
+		name    string
+		pattern string
+		want    string
+	}{
+		{
+			name:    "simple relative",
+			pattern: "rules.yml",
+			want:    filepath.Clean(filepath.Join(baseDir, "rules.yml")),
+		},
+		{
+			name:    "dot relative",
+			pattern: "./rules.yml",
+			want:    filepath.Clean(filepath.Join(baseDir, "./rules.yml")),
+		},
+		{
+			name:    "parent relative",
+			pattern: "../shared/rules.yml",
+			want:    filepath.Clean(filepath.Join(baseDir, "../shared/rules.yml")),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := resolveIncludePattern(tt.pattern, baseDir)
+			if got != tt.want {
+				t.Fatalf("resolveIncludePattern() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestProcessFileErrors(t *testing.T) {
 	// Use a strong password that meets security requirements
 	strongPassword := "S9f&h27!Gp*3K5^LmZ#qR8@tUvWxYz"

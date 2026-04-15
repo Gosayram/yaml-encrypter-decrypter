@@ -1,0 +1,101 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+
+language: "en-US"
+
+reviews:
+  profile: assertive
+  request_changes_workflow: false
+  high_level_summary: true
+  sequence_diagrams: false
+  estimate_code_review_effort: true
+  assess_linked_issues: true
+
+  path_filters:
+    - "!vendor/**"
+    - "!test_results/**"
+    - "!yed-assets/**"
+    - "!.git/**"
+    - "!*.bak"
+
+  path_instructions:
+    - path: "**/*.go"
+      instructions: >
+        Verify explicit error wrapping with %w, context propagation across boundaries,
+        goroutine lifecycle safety, and secure handling of secrets in logs and memory.
+    - path: "**/*_test.go"
+      instructions: >
+        Prefer table-driven tests with clear case names, validate edge cases and failure
+        paths, and ensure helper functions use t.Helper() where appropriate.
+    - path: ".github/workflows/**"
+      instructions: >
+        Check pinned action versions (SHA preferred), least-privilege permissions,
+        safe secret usage, and cache correctness.
+    - path: "Dockerfile*"
+      instructions: >
+        Ensure minimal base image, no secret leakage via ARG/ENV, and safe copy/install steps.
+    - path: "**/*.tf"
+      instructions: >
+        Check IaC for least-privilege defaults, no hardcoded sensitive values,
+        and predictable reproducible configuration.
+    - path: "scripts/**"
+      instructions: >
+        Focus on shell safety (quoting, set -euo pipefail where relevant), portability,
+        and avoiding destructive operations without explicit guards.
+
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+    drafts: false
+    auto_pause_after_reviewed_commits: 5
+
+  tools:
+    golangci-lint:
+      enabled: true
+      config_file: ".golangci.yml"
+    shellcheck:
+      enabled: true
+    yamllint:
+      enabled: true
+    markdownlint:
+      enabled: true
+    actionlint:
+      enabled: true
+    github-checks:
+      enabled: true
+      timeout_ms: 90000
+    hadolint:
+      enabled: true
+    tflint:
+      enabled: true
+    checkov:
+      enabled: true
+    trivy:
+      enabled: true
+    checkmake:
+      enabled: true
+    gitleaks:
+      enabled: true
+    trufflehog:
+      enabled: true
+    opengrep:
+      enabled: true
+    osvScanner:
+      enabled: true
+
+knowledge_base:
+  web_search:
+    enabled: true
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "**/.cursorrules"
+      - ".github/copilot-instructions.md"
+      - "**/CLAUDE.md"
+      - "**/AGENTS.md"
+      - "**/AGENT.md"
+      - "**/.cursor/rules/*"
+      - "**/.clinerules/*"
+      - "**/CONTRIBUTING.md"
+      - "docs/ARCHITECTURE.md"
+  learnings:
+    scope: auto

@@ -1482,8 +1482,6 @@ func readAndParseConfig(configFile string, debug bool) (*Config, error) {
 
 // processIncludedRules loads rules from included rule files
 func processIncludedRules(config *Config, configFile string, debug bool) ([]Rule, error) {
-	var includedRules []Rule
-
 	// Get the directory of the main config file to resolve relative paths
 	configDir := filepath.Dir(configFile)
 
@@ -1494,29 +1492,7 @@ func processIncludedRules(config *Config, configFile string, debug bool) ([]Rule
 		debugLog(debug, "No rules found in main config, checking include_rules...")
 	}
 
-	// Process include_rules if specified
-	if len(config.Encryption.IncludeRules) > 0 {
-		for _, rulePattern := range config.Encryption.IncludeRules {
-			if isExplicitIncludeRuleFile(rulePattern) {
-				resolvedPattern := resolveIncludePattern(rulePattern, configDir)
-				rules, err := loadRulesFromFile(resolvedPattern, debug)
-				if err != nil {
-					return nil, fmt.Errorf("failed to load included rules from file '%s': %w", rulePattern, err)
-				}
-				includedRules = append(includedRules, rules...)
-				continue
-			}
-
-			// Process the include file pattern (which may contain wildcards like rules[1-3].yml)
-			rules, err := loadRulesFromPattern(rulePattern, configDir, debug)
-			if err != nil {
-				return nil, fmt.Errorf("failed to load included rules from pattern '%s': %w", rulePattern, err)
-			}
-			includedRules = append(includedRules, rules...)
-		}
-	}
-
-	return includedRules, nil
+	return loadIncludedRules(config.Encryption.IncludeRules, configDir, debug, "included rules")
 }
 
 // validateRules validates the loaded rules
@@ -1584,10 +1560,31 @@ func resolveIncludePattern(pattern, baseDir string) string {
 	if filepath.IsAbs(pattern) {
 		return pattern
 	}
-	if strings.HasPrefix(pattern, "./") || strings.HasPrefix(pattern, "../") {
-		return filepath.Clean(pattern)
+	return filepath.Clean(filepath.Join(baseDir, pattern))
+}
+
+func loadIncludedRules(rulePatterns []string, configDir string, debug bool, label string) ([]Rule, error) {
+	var includedRules []Rule
+
+	for _, rulePattern := range rulePatterns {
+		if isExplicitIncludeRuleFile(rulePattern) {
+			resolvedPattern := resolveIncludePattern(rulePattern, configDir)
+			rules, err := loadRulesFromFile(resolvedPattern, debug)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load %s from file '%s': %w", label, rulePattern, err)
+			}
+			includedRules = append(includedRules, rules...)
+			continue
+		}
+
+		rules, err := loadRulesFromPattern(rulePattern, configDir, debug)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load %s from pattern '%s': %w", label, rulePattern, err)
+		}
+		includedRules = append(includedRules, rules...)
 	}
-	return filepath.Join(baseDir, pattern)
+
+	return includedRules, nil
 }
 
 // loadRulesFromPattern loads rules from files matching a pattern
@@ -2730,27 +2727,9 @@ func ProcessDiff(content []byte, config Config) error {
 
 // LoadAdditionalRules loads rules from additional rule files specified in command line
 func LoadAdditionalRules(config *Config, configDir string, debug bool) ([]Rule, *Config, error) {
-	var includedRules []Rule
-
-	if len(config.Encryption.IncludeRules) > 0 {
-		for _, rulePattern := range config.Encryption.IncludeRules {
-			if isExplicitIncludeRuleFile(rulePattern) {
-				resolvedPath := resolveIncludePattern(rulePattern, configDir)
-				rules, err := loadRulesFromFile(resolvedPath, debug)
-				if err != nil {
-					return nil, nil, fmt.Errorf("failed to load additional rules from file '%s': %w", rulePattern, err)
-				}
-				includedRules = append(includedRules, rules...)
-				continue
-			}
-
-			// Process the include file pattern (which may contain wildcards like rules[1-3].yml)
-			rules, err := loadRulesFromPattern(rulePattern, configDir, debug)
-			if err != nil {
-				return nil, nil, fmt.Errorf("failed to load additional rules from pattern '%s': %w", rulePattern, err)
-			}
-			includedRules = append(includedRules, rules...)
-		}
+	includedRules, err := loadIncludedRules(config.Encryption.IncludeRules, configDir, debug, "additional rules")
+	if err != nil {
+		return nil, nil, err
 	}
 
 	// Check if we found any rules
