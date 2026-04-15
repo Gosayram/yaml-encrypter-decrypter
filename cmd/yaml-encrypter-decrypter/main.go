@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -35,7 +36,18 @@ func parseIncludeRulePatterns(input string) []string {
 		}
 		patterns = append(patterns, trimmed)
 	}
+	if len(patterns) == 0 {
+		return nil
+	}
 	return patterns
+}
+
+func parseRequiredIncludeRulePatterns(input string) ([]string, error) {
+	patterns := parseIncludeRulePatterns(input)
+	if len(patterns) == 0 {
+		return nil, fmt.Errorf("include-rules provided, but no valid rule file patterns were found")
+	}
+	return patterns, nil
 }
 
 func main() {
@@ -139,8 +151,12 @@ func mainWithExitCode() int {
 
 	// Process additional rule files if specified
 	if flags.includeRules != "" {
-		// Parse comma-separated list of rule files
-		additionalRules := parseIncludeRulePatterns(flags.includeRules)
+		// Parse comma-separated list of rule files.
+		additionalRules, err := parseRequiredIncludeRulePatterns(flags.includeRules)
+		if err != nil {
+			log.Printf("Error: %v\n", err)
+			return 1
+		}
 
 		// Create a temporary YAML file with the include_rules section
 		tempConfig := processor.Config{}
@@ -212,8 +228,12 @@ func validateConfiguration(configPath string, debug bool, includeRulePatterns st
 	if includeRulePatterns != "" {
 		log.Printf("Processing additional rule files from command line: %s\n", includeRulePatterns)
 
-		// Parse comma-separated list of rule files
-		additionalRules := parseIncludeRulePatterns(includeRulePatterns)
+		// Parse comma-separated list of rule files.
+		additionalRules, err := parseRequiredIncludeRulePatterns(includeRulePatterns)
+		if err != nil {
+			log.Printf("Error: %v\n", err)
+			return 1
+		}
 
 		// Create a temporary YAML file with the include_rules section
 		tempConfig := processor.Config{}

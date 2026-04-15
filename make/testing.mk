@@ -108,7 +108,7 @@ prepare-test-examples: ## Create example files under .test/examples when missing
 	@echo "Preparing test examples..."
 	@mkdir -p .test/examples
 	@# Check if example files exist, if not create valid YAML fixtures
-	@if [ ! -f .test/examples/database_example.yml ]; then \
+	@if [ ! -s .test/examples/database_example.yml ]; then \
 		echo "Creating database example file..."; \
 		printf '%s\n' \
 			'database:' \
@@ -118,7 +118,7 @@ prepare-test-examples: ## Create example files under .test/examples when missing
 			'  password: supersecret' \
 			> .test/examples/database_example.yml; \
 	fi
-	@if [ ! -f .test/examples/api_example.yml ]; then \
+	@if [ ! -s .test/examples/api_example.yml ]; then \
 		echo "Creating API example file..."; \
 		printf '%s\n' \
 			'api:' \
@@ -127,7 +127,7 @@ prepare-test-examples: ## Create example files under .test/examples when missing
 			'  timeout: 30' \
 			> .test/examples/api_example.yml; \
 	fi
-	@if [ ! -f .test/examples/aws_example.yml ]; then \
+	@if [ ! -s .test/examples/aws_example.yml ]; then \
 		echo "Creating AWS example file..."; \
 		printf '%s\n' \
 			'aws:' \
@@ -136,7 +136,7 @@ prepare-test-examples: ## Create example files under .test/examples when missing
 			'  region: us-east-1' \
 			> .test/examples/aws_example.yml; \
 	fi
-	@if [ ! -f .test/examples/secrets_example.yml ]; then \
+	@if [ ! -s .test/examples/secrets_example.yml ]; then \
 		echo "Creating secrets example file..."; \
 		printf '%s\n' \
 			'secrets:' \

@@ -22,6 +22,11 @@ func TestParseIncludeRulePatterns(t *testing.T) {
 			want:  nil,
 		},
 		{
+			name:  "separators only",
+			input: ", , ,",
+			want:  nil,
+		},
+		{
 			name:  "single pattern",
 			input: "rules.yml",
 			want:  []string{"rules.yml"},
@@ -38,6 +43,44 @@ func TestParseIncludeRulePatterns(t *testing.T) {
 			got := parseIncludeRulePatterns(tt.input)
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Fatalf("parseIncludeRulePatterns() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseRequiredIncludeRulePatterns(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		want      []string
+		wantError bool
+	}{
+		{
+			name:      "empty input returns error",
+			input:     "",
+			wantError: true,
+		},
+		{
+			name:      "separators only returns error",
+			input:     ", , ,",
+			wantError: true,
+		},
+		{
+			name:      "valid patterns",
+			input:     "rules.yml, ./extra.yml",
+			want:      []string{"rules.yml", "./extra.yml"},
+			wantError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseRequiredIncludeRulePatterns(tt.input)
+			if (err != nil) != tt.wantError {
+				t.Fatalf("parseRequiredIncludeRulePatterns() error = %v, wantError %v", err, tt.wantError)
+			}
+			if !tt.wantError && !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("parseRequiredIncludeRulePatterns() = %v, want %v", got, tt.want)
 			}
 		})
 	}

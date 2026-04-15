@@ -211,6 +211,10 @@ const (
 	firstRuleOffset = 5
 )
 
+func isValidOperation(operation string) bool {
+	return operation == OperationEncrypt || operation == OperationDecrypt
+}
+
 // SetKeyDerivationAlgorithm sets the processor encryption algorithm.
 func SetKeyDerivationAlgorithm(algorithm encryption.KeyDerivationAlgorithm) error {
 	if _, err := encryption.ValidateAlgorithm(string(algorithm)); err != nil {
@@ -561,6 +565,9 @@ func wildcardToRegex(pattern string) string {
 // processYAMLContent processes YAML content with the given rules
 func processYAMLContent(content []byte, key, operation string, rules []Rule, processedPaths map[string]bool, debug bool) (*yaml.Node, error) {
 	debugLog(debug, "Processing YAML content with %d rules", len(rules))
+	if !isValidOperation(operation) {
+		return nil, fmt.Errorf("invalid operation: %s", operation)
+	}
 
 	// Parse YAML content
 	var node yaml.Node
@@ -710,13 +717,13 @@ func processScalarNodeStandard(node *yaml.Node, path string, operation string, k
 
 func processScalarNodeStandardWithRule(node *yaml.Node, path string, operation string, key string, ruleName string, canApply bool, debug bool) error {
 	// Check for valid operation
-	if operation != OperationEncrypt && operation != OperationDecrypt {
+	if !isValidOperation(operation) {
 		return fmt.Errorf("invalid operation: %s", operation)
 	}
 
 	// Keep backward-compatible weak-key error semantics for obviously short keys.
 	if len(key) < minKeyLengthGuard {
-		return fmt.Errorf("key is too weak: length should be at least %d characters", MinKeyLengthStandard)
+		return fmt.Errorf("key is too weak: length should be at least %d characters", minKeyLengthGuard)
 	}
 
 	if !canApply {
@@ -1340,6 +1347,9 @@ func restoreFoldedStyleSections(processedContent []byte, foldedSections []Folded
 // ShowDiff shows the difference between original and processed YAML
 func ShowDiff(filePath, key, operation string, debug bool, configPath string) error {
 	debugLog(debug, "[ShowDiff] Starting with config path: '%s', type: %T", configPath, configPath)
+	if !isValidOperation(operation) {
+		return fmt.Errorf("invalid operation: %s", operation)
+	}
 
 	// Safe logging of key - showing only last 4 characters
 	safeKeyLog := "****"
@@ -1866,7 +1876,7 @@ func ProcessNode(node *yaml.Node, path, key, operation string, rules []Rule, pro
 	}
 
 	// Check for valid operation
-	if operation != OperationEncrypt && operation != OperationDecrypt {
+	if !isValidOperation(operation) {
 		return fmt.Errorf("invalid operation: %s", operation)
 	}
 
@@ -2782,7 +2792,7 @@ func ProcessDiff(content []byte, config Config) error {
 	if operation == "" {
 		operation = OperationEncrypt
 	}
-	if operation != OperationEncrypt && operation != OperationDecrypt {
+	if !isValidOperation(operation) {
 		return fmt.Errorf("invalid operation for diff: %s", operation)
 	}
 
@@ -2798,7 +2808,7 @@ func ProcessDiff(content []byte, config Config) error {
 	if err != nil {
 		return fmt.Errorf("error processing YAML content: %w", err)
 	}
-	if len(originalData.Content) == 0 || len(processedNode.Content) == 0 {
+	if processedNode == nil || len(originalData.Content) == 0 || len(processedNode.Content) == 0 {
 		return fmt.Errorf("invalid YAML document structure for diff")
 	}
 

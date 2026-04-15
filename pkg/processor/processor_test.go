@@ -1737,6 +1737,10 @@ password: supersecret
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			var diff bytes.Buffer
+			SetDiffOutput(&diff)
+			defer SetDiffOutput(nil)
+
 			err := ProcessDiff([]byte(tt.content), tt.config)
 			if (err != nil) != tt.wantError {
 				t.Errorf("ProcessDiff() error = %v, wantError %v", err, tt.wantError)
@@ -2023,6 +2027,15 @@ encryption:
 			operation:  OperationEncrypt,
 			debug:      true,
 			configPath: filepath.Join(tmpDir, "nonexistent-config.yaml"),
+			wantError:  true,
+		},
+		{
+			name:       "invalid_operation",
+			filePath:   yamlPath,
+			key:        testKey,
+			operation:  "invalid",
+			debug:      true,
+			configPath: configPath,
 			wantError:  true,
 		},
 	}
@@ -2452,6 +2465,7 @@ data:
 		operation string
 		rules     []Rule
 		debug     bool
+		wantErr   bool
 		validator func(*testing.T, *yaml.Node)
 	}{
 		{
@@ -2461,6 +2475,7 @@ data:
 			operation: OperationEncrypt,
 			rules:     []Rule{allRule},
 			debug:     true,
+			wantErr:   false,
 			validator: func(t *testing.T, node *yaml.Node) {
 				// All scalar values should be encrypted
 				dataNode := getNodeByPathAdditional(node, "data")
@@ -2511,8 +2526,9 @@ data:
 			operation: OperationEncrypt,
 			// IMPORTANT: Change the order of rules. Now doNotEncryptRule comes first
 			// (which excludes all), and then passwordPatternRule (which encrypts only passwords)
-			rules: []Rule{doNotEncryptRule, passwordPatternRule},
-			debug: true,
+			rules:   []Rule{doNotEncryptRule, passwordPatternRule},
+			debug:   true,
+			wantErr: false,
 			validator: func(t *testing.T, node *yaml.Node) {
 				// In the current implementation, the processRules function always checks first
 				// for rules with Action=None and then for other Actions, so even if the order of rules changes,
@@ -2552,6 +2568,7 @@ data:
 			operation: OperationEncrypt,
 			rules:     []Rule{}, // Empty list of rules
 			debug:     true,
+			wantErr:   false,
 			validator: func(t *testing.T, node *yaml.Node) {
 				// In the current implementation, with an empty list of rules, all paths match all rules
 				// and all values will be encrypted. We'll adjust expectations accordingly.
@@ -2589,6 +2606,7 @@ data:
 			operation: OperationEncrypt,
 			rules:     []Rule{allRule, excludeRule},
 			debug:     true,
+			wantErr:   false,
 			validator: func(t *testing.T, node *yaml.Node) {
 				// All values except excluded should be encrypted
 				dataNode := getNodeByPathAdditional(node, "data")
@@ -2637,6 +2655,7 @@ data:
 			operation: OperationEncrypt,
 			rules:     []Rule{allRule},
 			debug:     true,
+			wantErr:   true,
 			validator: func(t *testing.T, node *yaml.Node) {
 				if node != nil {
 					t.Errorf("Expected nil node for invalid YAML")
@@ -2650,9 +2669,24 @@ data:
 			operation: OperationEncrypt,
 			rules:     []Rule{allRule},
 			debug:     true,
+			wantErr:   true,
 			validator: func(t *testing.T, node *yaml.Node) {
 				if node != nil {
 					t.Errorf("Expected nil node for empty content")
+				}
+			},
+		},
+		{
+			name:      "Process invalid operation",
+			content:   yamlContent,
+			key:       key,
+			operation: "invalid",
+			rules:     []Rule{allRule},
+			debug:     true,
+			wantErr:   true,
+			validator: func(t *testing.T, node *yaml.Node) {
+				if node != nil {
+					t.Errorf("Expected nil node for invalid operation")
 				}
 			},
 		},
@@ -2665,18 +2699,13 @@ data:
 			// Process the YAML content
 			node, err := processYAMLContent(tt.content, tt.key, tt.operation, tt.rules, processedPaths, tt.debug)
 
-			// Validate results
-			if tt.name == "Process invalid YAML" || tt.name == "Process empty content" {
-				if err == nil {
-					t.Errorf("Expected error for %s but got nil", tt.name)
-				}
-				tt.validator(t, node)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("processYAMLContent() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 
-			// Check no error for valid cases
-			if err != nil {
-				t.Errorf("Unexpected error: %v", err)
+			if tt.wantErr {
+				tt.validator(t, node)
 				return
 			}
 
@@ -2852,26 +2881,12 @@ func TestPrintSequenceDiff(t *testing.T) {
 		},
 	}
 
-	// Capture stdout to verify printSequenceDiff output
-	oldStdout := os.Stdout
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("Failed to create pipe: %v", err)
-	}
-	defer func() { _ = r.Close() }()
-	defer func() { _ = w.Close() }()
-	os.Stdout = w
-
-	// Call printSequenceDiff
-	printSequenceDiff(original, processed, true, false, "test.path")
-
-	// Restore stdout and get captured output
-	_ = w.Close()
-	os.Stdout = oldStdout
+	// Capture diff output using package hook.
 	var buf bytes.Buffer
-	if _, err := io.Copy(&buf, r); err != nil {
-		t.Fatalf("Failed to copy from pipe: %v", err)
-	}
+	SetDiffOutput(&buf)
+	defer SetDiffOutput(nil)
+
+	printSequenceDiff(original, processed, true, false, "test.path")
 	output := buf.String()
 
 	// Verify output contains the expected diffs
@@ -2887,20 +2902,8 @@ func TestPrintSequenceDiff(t *testing.T) {
 	}
 
 	// Test with unsecureDiff=true
-	r, w, err = os.Pipe()
-	if err != nil {
-		t.Fatalf("Failed to create pipe: %v", err)
-	}
-	defer func() { _ = r.Close() }()
-	defer func() { _ = w.Close() }()
-	os.Stdout = w
-	printSequenceDiff(original, processed, true, true, "test.path")
-	_ = w.Close()
-	os.Stdout = oldStdout
 	buf.Reset()
-	if _, err := io.Copy(&buf, r); err != nil {
-		t.Fatalf("Failed to copy from pipe: %v", err)
-	}
+	printSequenceDiff(original, processed, true, true, "test.path")
 	unsecureOutput := buf.String()
 
 	// Verify unsecure output shows the actual encrypted values
@@ -2917,17 +2920,8 @@ func TestPrintSequenceDiff(t *testing.T) {
 		},
 	}
 
-	// Call with different length sequences
-	r, w, err = os.Pipe()
-	if err != nil {
-		t.Fatalf("Failed to create pipe: %v", err)
-	}
-	defer func() { _ = r.Close() }()
-	defer func() { _ = w.Close() }()
-	os.Stdout = w
+	// Call with different length sequences (must not panic).
 	printSequenceDiff(shortOriginal, processed, true, false, "test.path")
-	_ = w.Close()
-	os.Stdout = oldStdout
 }
 
 // TestProcessSequenceNodeWithRuleExclusions tests the processSequenceNodeWithRuleExclusions function
@@ -3577,7 +3571,7 @@ func TestProcessScalarNodeStandard(t *testing.T) {
 			operation: "encrypt",
 			path:      "test.path",
 			wantErr:   true,
-			errMsg:    "key is too weak: length should be at least 20 characters",
+			errMsg:    "key is too weak: length should be at least 8 characters",
 		},
 		{
 			name:      "Successful decryption",
