@@ -39,6 +39,11 @@ func TestValidateAlgorithm(t *testing.T) {
 			expected:  PBKDF2SHA512Algorithm,
 		},
 		{
+			name:      "algorithm with surrounding spaces",
+			algorithm: "  pbkdf2-sha256  ",
+			expected:  PBKDF2SHA256Algorithm,
+		},
+		{
 			name:          "invalid algorithm",
 			algorithm:     "invalid-algorithm",
 			expectError:   true,

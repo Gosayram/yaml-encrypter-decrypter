@@ -233,6 +233,28 @@ func TestProcessNode(t *testing.T) {
 	}
 }
 
+func TestProcessNodeWithNilProcessedPaths(t *testing.T) {
+	node := &yaml.Node{
+		Kind:  yaml.ScalarNode,
+		Value: "secret-value",
+	}
+	rules := []Rule{
+		{
+			Name:    "encrypt-all",
+			Block:   "*",
+			Pattern: "**",
+		},
+	}
+
+	err := ProcessNode(node, "test.path", "S9f&h27!Gp*3K5^LmZ#qR8@tUvWxYz", OperationEncrypt, rules, nil, false)
+	if err != nil {
+		t.Fatalf("ProcessNode() unexpected error: %v", err)
+	}
+	if !strings.HasPrefix(node.Value, AES) {
+		t.Fatalf("expected node value to be encrypted, got: %s", node.Value)
+	}
+}
+
 func BenchmarkProcessFile(b *testing.B) {
 	// Create temporary config file
 	configContent := `encryption:
@@ -697,6 +719,16 @@ func TestLoadAdditionalRulesFailsForMissingExplicitFile(t *testing.T) {
 		t.Fatal("expected error for missing explicit include file, got nil")
 	}
 	if !strings.Contains(err.Error(), "failed to load additional rules from file") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadAdditionalRulesRejectsNilConfig(t *testing.T) {
+	_, _, err := LoadAdditionalRules(nil, t.TempDir(), false)
+	if err == nil {
+		t.Fatal("expected error for nil config, got nil")
+	}
+	if !strings.Contains(err.Error(), "config cannot be nil") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -2712,6 +2744,99 @@ data:
 			// Validate the node
 			tt.validator(t, node)
 		})
+	}
+}
+
+func TestProcessYAMLContentWithNilProcessedPaths(t *testing.T) {
+	content := []byte("data:\n  password: secret123\n")
+	key := "S9f&h27!Gp*3K5^LmZ#qR8@tUvWxYz"
+	rules := []Rule{
+		{
+			Name:    "encrypt all",
+			Block:   "*",
+			Pattern: "**",
+			Action:  "encrypt",
+		},
+	}
+
+	node, err := processYAMLContent(content, key, OperationEncrypt, rules, nil, false)
+	if err != nil {
+		t.Fatalf("processYAMLContent() unexpected error: %v", err)
+	}
+
+	passwordNode := getNodeByPathAdditional(node, "data.password")
+	if passwordNode == nil {
+		t.Fatalf("password node not found")
+	}
+	if !strings.HasPrefix(passwordNode.Value, AES) {
+		t.Fatalf("expected password to be encrypted, got: %s", passwordNode.Value)
+	}
+}
+
+func TestProcessRulesNormalizesRuleAction(t *testing.T) {
+	tests := []struct {
+		name         string
+		rules        []Rule
+		wantRuleName string
+		wantApply    bool
+	}{
+		{
+			name: "none action with spaces and uppercase is exclusion",
+			rules: []Rule{
+				{
+					Name:    "skip all",
+					Block:   "*",
+					Pattern: "**",
+					Action:  " NONE ",
+				},
+			},
+			wantRuleName: "",
+			wantApply:    false,
+		},
+		{
+			name: "empty action defaults to encrypt",
+			rules: []Rule{
+				{
+					Name:    "encrypt by default",
+					Block:   "*",
+					Pattern: "**",
+					Action:  "   ",
+				},
+			},
+			wantRuleName: "encrypt by default",
+			wantApply:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotRuleName, gotApply := processRules("data.password", tt.rules, false)
+			if gotRuleName != tt.wantRuleName {
+				t.Fatalf("processRules() ruleName = %q, want %q", gotRuleName, tt.wantRuleName)
+			}
+			if gotApply != tt.wantApply {
+				t.Fatalf("processRules() apply = %v, want %v", gotApply, tt.wantApply)
+			}
+		})
+	}
+}
+
+func TestValidateRulesRejectsInvalidAction(t *testing.T) {
+	rules := []Rule{
+		{
+			Name:    "invalid-action-rule",
+			Block:   "data",
+			Pattern: "**",
+			Action:  "decrypt",
+		},
+	}
+
+	err := ValidateRules(rules, false)
+	if err == nil {
+		t.Fatalf("ValidateRules() expected error for invalid action, got nil")
+	}
+	if !strings.Contains(err.Error(), "invalid action") {
+		t.Fatalf("ValidateRules() error = %v, want invalid action message", err)
 	}
 }
 

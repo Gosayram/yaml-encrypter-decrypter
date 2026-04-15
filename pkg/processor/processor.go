@@ -163,7 +163,8 @@ const (
 	Base64SinglePadding = 3 // If length % 4 == 3, need to add one '=' character
 
 	// Action types
-	ActionNone = "none"
+	ActionNone    = "none"
+	ActionEncrypt = "encrypt"
 
 	// Magic numbers
 	MinEncryptedLength = 6
@@ -568,6 +569,9 @@ func processYAMLContent(content []byte, key, operation string, rules []Rule, pro
 	if !isValidOperation(operation) {
 		return nil, fmt.Errorf("invalid operation: %s", operation)
 	}
+	if processedPaths == nil {
+		processedPaths = make(map[string]bool)
+	}
 
 	// Parse YAML content
 	var node yaml.Node
@@ -587,7 +591,7 @@ func processYAMLContent(content []byte, key, operation string, rules []Rule, pro
 
 	// First, identify all paths that should be excluded based on action: none rules
 	for _, rule := range rules {
-		if rule.Action == ActionNone {
+		if normalizedRuleAction(rule.Action) == ActionNone {
 			debugLog(debug, "Marking paths for exclusion based on rule: %s", rule.Name)
 			if err := markExcludedPaths(node.Content[0], rule, "", excludedPaths, debug); err != nil {
 				debugLog(debug, "Error marking excluded paths: %v", err)
@@ -1805,6 +1809,8 @@ func checkDuplicateRules(rules []Rule, debug bool) []string {
 	nameMap := make(map[string]int)                       // rule name -> line number
 
 	for i, rule := range rules {
+		action := normalizedRuleAction(rule.Action)
+
 		// Check for duplicate rule names
 		if previousLine, exists := nameMap[rule.Name]; exists {
 			// Calculate actual line numbers in YAML file
@@ -1824,15 +1830,15 @@ func checkDuplicateRules(rules []Rule, debug bool) []string {
 		if _, exists := ruleMap[rule.Block][rule.Pattern]; !exists {
 			ruleMap[rule.Block][rule.Pattern] = make(map[string]int)
 		}
-		if line, exists := ruleMap[rule.Block][rule.Pattern][rule.Action]; exists {
+		if line, exists := ruleMap[rule.Block][rule.Pattern][action]; exists {
 			// Calculate actual line numbers in YAML file
 			duplicateLine := i*linesPerRule + firstRuleOffset
 			originalLine := line*linesPerRule + firstRuleOffset
 			msg := fmt.Sprintf("Duplicate rule configuration found: line %d: rule '%s' (block: '%s', pattern: '%s', action: '%s') duplicates rule at line %d",
-				duplicateLine, rule.Name, rule.Block, rule.Pattern, rule.Action, originalLine)
+				duplicateLine, rule.Name, rule.Block, rule.Pattern, action, originalLine)
 			duplicates = append(duplicates, msg)
 		} else {
-			ruleMap[rule.Block][rule.Pattern][rule.Action] = i
+			ruleMap[rule.Block][rule.Pattern][action] = i
 		}
 	}
 
@@ -1851,7 +1857,7 @@ func processRules(path string, rules []Rule, debug bool) (string, bool) {
 
 	// Check rules with action=none first
 	for _, rule := range rules {
-		if rule.Action == ActionNone && matchesRule(path, rule, debug) {
+		if normalizedRuleAction(rule.Action) == ActionNone && matchesRule(path, rule, debug) {
 			debugLog(debug, "Path %s matches 'none' action rule %s - skipping encryption", path, rule.Name)
 			return "", false
 		}
@@ -1859,7 +1865,7 @@ func processRules(path string, rules []Rule, debug bool) (string, bool) {
 
 	// Then check rules with other actions
 	for _, rule := range rules {
-		if rule.Action != ActionNone && matchesRule(path, rule, debug) {
+		if normalizedRuleAction(rule.Action) != ActionNone && matchesRule(path, rule, debug) {
 			debugLog(debug, "Path %s matches rule %s for encryption", path, rule.Name)
 			return rule.Name, true
 		}
@@ -1873,6 +1879,9 @@ func processRules(path string, rules []Rule, debug bool) (string, bool) {
 func ProcessNode(node *yaml.Node, path, key, operation string, rules []Rule, processedPaths map[string]bool, debug bool) error {
 	if node == nil {
 		return nil
+	}
+	if processedPaths == nil {
+		processedPaths = make(map[string]bool)
 	}
 
 	// Check for valid operation
@@ -2236,7 +2245,7 @@ func showDiff(data *yaml.Node, key, operation string, unsecureDiff bool, debug b
 
 	// First, identify all paths that should be excluded based on action: none rules
 	for _, rule := range rules {
-		if rule.Action == ActionNone {
+		if normalizedRuleAction(rule.Action) == ActionNone {
 			debugLog(debug, "Marking paths for exclusion based on rule: %s", rule.Name)
 			if err := markExcludedPaths(encryptedData.Content[0], rule, "", excludedPaths, debug); err != nil {
 				debugLog(debug, "Error marking excluded paths: %v", err)
@@ -2246,7 +2255,7 @@ func showDiff(data *yaml.Node, key, operation string, unsecureDiff bool, debug b
 
 	// Then process all rules, skipping excluded paths
 	for _, rule := range rules {
-		if rule.Action != ActionNone {
+		if normalizedRuleAction(rule.Action) != ActionNone {
 			debugLog(debug, "Processing rule: %s", rule.Name)
 			if err := processYAMLWithExclusions(encryptedData.Content[0], key, operation, rule, "", make(map[string]bool), excludedPaths, debug); err != nil {
 				debugLog(debug, "Error processing YAML: %v", err)
@@ -2822,6 +2831,10 @@ func ProcessDiff(content []byte, config Config) error {
 
 // LoadAdditionalRules loads rules from additional rule files specified in command line
 func LoadAdditionalRules(config *Config, configDir string, debug bool) ([]Rule, *Config, error) {
+	if config == nil {
+		return nil, nil, fmt.Errorf("config cannot be nil")
+	}
+
 	includedRules, err := loadIncludedRules(config.Encryption.IncludeRules, configDir, debug, "additional rules")
 	if err != nil {
 		return nil, nil, err
@@ -2847,6 +2860,15 @@ func ValidateRules(rules []Rule, debug bool) error {
 		if rule.Pattern == "" {
 			return fmt.Errorf("rule '%s' is missing pattern", rule.Name)
 		}
+		if !isValidRuleAction(rule.Action) {
+			return fmt.Errorf(
+				"rule '%s' has invalid action '%s' (valid actions: '%s', '%s')",
+				rule.Name,
+				rule.Action,
+				ActionEncrypt,
+				ActionNone,
+			)
+		}
 	}
 
 	// Check for duplicate rules
@@ -2862,4 +2884,21 @@ func ValidateRules(rules []Rule, debug bool) error {
 	}
 
 	return nil
+}
+
+func normalizedRuleAction(action string) string {
+	normalized := strings.ToLower(strings.TrimSpace(action))
+	if normalized == "" {
+		return ActionEncrypt
+	}
+	return normalized
+}
+
+func isValidRuleAction(action string) bool {
+	switch normalizedRuleAction(action) {
+	case ActionEncrypt, ActionNone:
+		return true
+	default:
+		return false
+	}
 }

@@ -783,3 +783,17 @@ func TestSetDefaultAlgorithm(t *testing.T) {
 			GetDefaultAlgorithm(), Argon2idAlgorithm)
 	}
 }
+
+func TestSetDefaultAlgorithmIgnoresInvalidValue(t *testing.T) {
+	originalDefault := GetDefaultAlgorithm()
+	defer func() {
+		SetDefaultAlgorithm(originalDefault)
+	}()
+
+	SetDefaultAlgorithm(Argon2idAlgorithm)
+	SetDefaultAlgorithm(KeyDerivationAlgorithm("invalid-algorithm"))
+
+	if got := GetDefaultAlgorithm(); got != Argon2idAlgorithm {
+		t.Errorf("Default algorithm changed on invalid input, got %s, want %s", got, Argon2idAlgorithm)
+	}
+}

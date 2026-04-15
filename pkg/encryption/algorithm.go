@@ -11,23 +11,19 @@ func ValidateAlgorithm(algorithm string) (KeyDerivationAlgorithm, error) {
 		return getDefaultAlgorithm(), nil
 	}
 
-	switch strings.ToLower(algorithm) {
-	case "argon2id":
-		return Argon2idAlgorithm, nil
-	case "pbkdf2-sha256":
-		return PBKDF2SHA256Algorithm, nil
-	case "pbkdf2-sha512":
-		return PBKDF2SHA512Algorithm, nil
-	default:
+	normalized := KeyDerivationAlgorithm(strings.ToLower(strings.TrimSpace(algorithm)))
+	if !isSupportedKeyDerivationAlgorithm(normalized) {
 		return "", fmt.Errorf("error: invalid algorithm '%s'. Valid options are: argon2id, pbkdf2-sha256, pbkdf2-sha512", algorithm)
 	}
+	return normalized, nil
 }
 
 // GetAvailableAlgorithms returns a list of available key derivation algorithms
 func GetAvailableAlgorithms() []string {
-	return []string{
-		"argon2id",
-		"pbkdf2-sha256",
-		"pbkdf2-sha512",
+	algorithms := GetAvailableKeyDerivationAlgorithms()
+	result := make([]string, 0, len(algorithms))
+	for _, algorithm := range algorithms {
+		result = append(result, string(algorithm))
 	}
+	return result
 }

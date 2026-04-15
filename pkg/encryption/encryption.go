@@ -485,6 +485,11 @@ func decompress(compressedData []byte) ([]byte, error) {
 
 // SetDefaultAlgorithm sets the default key derivation algorithm
 func SetDefaultAlgorithm(algorithm KeyDerivationAlgorithm) {
+	if !isSupportedKeyDerivationAlgorithm(algorithm) {
+		secureLog("[DEBUG:SetDefaultAlgorithm] Ignoring unsupported algorithm: %s\n", algorithm)
+		return
+	}
+
 	defaultAlgorithmMu.Lock()
 	defer defaultAlgorithmMu.Unlock()
 	defaultKeyDerivationAlgorithm = algorithm
@@ -499,6 +504,15 @@ func getDefaultAlgorithm() KeyDerivationAlgorithm {
 // GetDefaultAlgorithm returns the current default key derivation algorithm.
 func GetDefaultAlgorithm() KeyDerivationAlgorithm {
 	return getDefaultAlgorithm()
+}
+
+func isSupportedKeyDerivationAlgorithm(algorithm KeyDerivationAlgorithm) bool {
+	switch algorithm {
+	case Argon2idAlgorithm, PBKDF2SHA256Algorithm, PBKDF2SHA512Algorithm:
+		return true
+	default:
+		return false
+	}
 }
 
 // GetAvailableKeyDerivationAlgorithms returns the list of available key derivation algorithms
