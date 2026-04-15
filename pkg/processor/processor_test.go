@@ -255,6 +255,34 @@ func TestProcessNodeWithNilProcessedPaths(t *testing.T) {
 	}
 }
 
+func TestSetKeyDerivationAlgorithmNormalizesInput(t *testing.T) {
+	originalDefault := encryption.GetDefaultAlgorithm()
+	defer encryption.SetDefaultAlgorithm(originalDefault)
+
+	if err := SetKeyDerivationAlgorithm(encryption.KeyDerivationAlgorithm("  PBKDF2-SHA256  ")); err != nil {
+		t.Fatalf("SetKeyDerivationAlgorithm() unexpected error: %v", err)
+	}
+
+	if got := encryption.GetDefaultAlgorithm(); got != encryption.PBKDF2SHA256Algorithm {
+		t.Fatalf("default algorithm = %s, want %s", got, encryption.PBKDF2SHA256Algorithm)
+	}
+}
+
+func TestSetKeyDerivationAlgorithmRejectsInvalidInput(t *testing.T) {
+	originalDefault := encryption.GetDefaultAlgorithm()
+	defer encryption.SetDefaultAlgorithm(originalDefault)
+
+	encryption.SetDefaultAlgorithm(encryption.Argon2idAlgorithm)
+
+	err := SetKeyDerivationAlgorithm(encryption.KeyDerivationAlgorithm("unsupported"))
+	if err == nil {
+		t.Fatal("SetKeyDerivationAlgorithm() expected error, got nil")
+	}
+	if got := encryption.GetDefaultAlgorithm(); got != encryption.Argon2idAlgorithm {
+		t.Fatalf("default algorithm changed on invalid input, got %s", got)
+	}
+}
+
 func BenchmarkProcessFile(b *testing.B) {
 	// Create temporary config file
 	configContent := `encryption:
@@ -730,6 +758,34 @@ func TestLoadAdditionalRulesRejectsNilConfig(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "config cannot be nil") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadAdditionalRulesTrimsAndSkipsEmptyPatterns(t *testing.T) {
+	tmpDir := t.TempDir()
+	rulesPath := filepath.Join(tmpDir, "included-rules.yml")
+	rulesContent := `rules:
+  - name: "included"
+    block: "data"
+    pattern: "**"
+    action: "encrypt"
+`
+	if err := os.WriteFile(rulesPath, []byte(rulesContent), 0644); err != nil {
+		t.Fatalf("failed to write included rules: %v", err)
+	}
+
+	cfg := &Config{}
+	cfg.Encryption.IncludeRules = []string{"   ", "  included-rules.yml  "}
+
+	rules, _, err := LoadAdditionalRules(cfg, tmpDir, false)
+	if err != nil {
+		t.Fatalf("LoadAdditionalRules() unexpected error: %v", err)
+	}
+	if len(rules) != 1 {
+		t.Fatalf("LoadAdditionalRules() returned %d rules, want 1", len(rules))
+	}
+	if rules[0].Name != "included" {
+		t.Fatalf("LoadAdditionalRules() first rule name = %q, want %q", rules[0].Name, "included")
 	}
 }
 
@@ -2227,6 +2283,26 @@ app:
 	}
 }
 
+func TestMarkExcludedPathsHandlesNilMap(t *testing.T) {
+	node := &yaml.Node{
+		Kind: yaml.MappingNode,
+		Content: []*yaml.Node{
+			{Kind: yaml.ScalarNode, Value: "password"},
+			{Kind: yaml.ScalarNode, Value: "secret"},
+		},
+	}
+	rule := Rule{
+		Name:    "exclude-all",
+		Block:   "*",
+		Pattern: "**",
+		Action:  ActionNone,
+	}
+
+	if err := markExcludedPaths(node, rule, "config", nil, false); err != nil {
+		t.Fatalf("markExcludedPaths() unexpected error: %v", err)
+	}
+}
+
 // Additional test for processYAMLWithExclusions and related functions
 func TestProcessYAMLWithExclusionsAdditional(t *testing.T) {
 	// Prepare test data
@@ -2357,6 +2433,36 @@ users:
 				}
 			}
 		})
+	}
+}
+
+func TestProcessYAMLWithExclusionsRejectsInvalidOperation(t *testing.T) {
+	node := &yaml.Node{
+		Kind:  yaml.ScalarNode,
+		Value: "secret",
+	}
+	rule := Rule{
+		Name:    "encrypt-all",
+		Block:   "*",
+		Pattern: "**",
+		Action:  ActionEncrypt,
+	}
+
+	err := processYAMLWithExclusions(
+		node,
+		"S9f&h27!Gp*3K5^LmZ#qR8@tUvWxYz",
+		"invalid",
+		rule,
+		"data.password",
+		nil,
+		nil,
+		false,
+	)
+	if err == nil {
+		t.Fatal("processYAMLWithExclusions() expected invalid operation error, got nil")
+	}
+	if !strings.Contains(err.Error(), "invalid operation") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -2806,6 +2912,19 @@ func TestProcessRulesNormalizesRuleAction(t *testing.T) {
 			wantRuleName: "encrypt by default",
 			wantApply:    true,
 		},
+		{
+			name: "invalid action is ignored",
+			rules: []Rule{
+				{
+					Name:    "invalid action rule",
+					Block:   "*",
+					Pattern: "**",
+					Action:  "decrypt",
+				},
+			},
+			wantRuleName: "",
+			wantApply:    false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -2890,6 +3009,31 @@ func TestValidateRulesTreatsEmptyActionAsEncryptForDuplicateDetection(t *testing
 	}
 }
 
+func TestValidateRulesDetectsDuplicateRulesWithTrimmedBlockPattern(t *testing.T) {
+	rules := []Rule{
+		{
+			Name:    "rule-1",
+			Block:   "data",
+			Pattern: "**",
+			Action:  ActionEncrypt,
+		},
+		{
+			Name:    "rule-2",
+			Block:   " data ",
+			Pattern: " ** ",
+			Action:  ActionEncrypt,
+		},
+	}
+
+	err := ValidateRules(rules, false)
+	if err == nil {
+		t.Fatal("ValidateRules() expected duplicate conflict error, got nil")
+	}
+	if !strings.Contains(err.Error(), "rule conflict detected") {
+		t.Fatalf("ValidateRules() error = %v, want rule conflict detected", err)
+	}
+}
+
 func TestValidateRulesRejectsWhitespaceBlock(t *testing.T) {
 	rules := []Rule{
 		{
@@ -2925,6 +3069,58 @@ func TestValidateRulesRejectsWhitespacePattern(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "is missing pattern") {
 		t.Fatalf("ValidateRules() error = %v, want missing pattern message", err)
+	}
+}
+
+func TestIsSensitiveValueRespectsUnsecureDiffFlag(t *testing.T) {
+	unsecureDiffLog.Store(false)
+	t.Cleanup(func() {
+		unsecureDiffLog.Store(false)
+	})
+
+	if !isSensitiveValue("plain-secret-value") {
+		t.Fatalf("expected value to be sensitive when unsecureDiff is disabled")
+	}
+
+	unsecureDiffLog.Store(true)
+	if isSensitiveValue("plain-secret-value") {
+		t.Fatalf("expected non-password value to be non-sensitive when unsecureDiff is enabled")
+	}
+	if !isSensitiveValue("db_password") {
+		t.Fatalf("expected password-like value to stay sensitive when unsecureDiff is enabled")
+	}
+	if !isSensitiveValue("token=yed_encryption_key") {
+		t.Fatalf("expected YED_ENCRYPTION_KEY-like value to stay sensitive regardless of casing")
+	}
+}
+
+func TestProcessYAMLWithExclusionsHandlesNilMaps(t *testing.T) {
+	node := &yaml.Node{
+		Kind:  yaml.ScalarNode,
+		Value: "secret-value",
+	}
+	rule := Rule{
+		Name:    "encrypt-all",
+		Block:   "*",
+		Pattern: "**",
+		Action:  ActionEncrypt,
+	}
+
+	err := processYAMLWithExclusions(
+		node,
+		"S9f&h27!Gp*3K5^LmZ#qR8@tUvWxYz",
+		OperationEncrypt,
+		rule,
+		"data.password",
+		nil,
+		nil,
+		false,
+	)
+	if err != nil {
+		t.Fatalf("processYAMLWithExclusions() unexpected error: %v", err)
+	}
+	if !strings.HasPrefix(node.Value, AES) {
+		t.Fatalf("expected value to be encrypted, got: %s", node.Value)
 	}
 }
 
@@ -3919,5 +4115,18 @@ func TestProcessScalarNodeWithRules(t *testing.T) {
 					tt.expectMatch, matchFound, tt.path)
 			}
 		})
+	}
+}
+
+func TestMatchesRuleNormalizesBlockAndPattern(t *testing.T) {
+	rule := Rule{
+		Name:    "trimmed-rule",
+		Block:   " users ",
+		Pattern: " password ",
+		Action:  ActionEncrypt,
+	}
+
+	if !matchesRule("users.password", rule, false) {
+		t.Fatal("expected matchesRule() to match when block/pattern contain surrounding spaces")
 	}
 }

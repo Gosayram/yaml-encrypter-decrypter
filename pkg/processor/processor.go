@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"unicode"
 	"unicode/utf8"
 
@@ -218,10 +219,11 @@ func isValidOperation(operation string) bool {
 
 // SetKeyDerivationAlgorithm sets the processor encryption algorithm.
 func SetKeyDerivationAlgorithm(algorithm encryption.KeyDerivationAlgorithm) error {
-	if _, err := encryption.ValidateAlgorithm(string(algorithm)); err != nil {
+	validatedAlgorithm, err := encryption.ValidateAlgorithm(string(algorithm))
+	if err != nil {
 		return err
 	}
-	encryption.SetDefaultAlgorithm(algorithm)
+	encryption.SetDefaultAlgorithm(validatedAlgorithm)
 	return nil
 }
 
@@ -422,20 +424,23 @@ func clearRegexCache() {
 // matchesRule checks if a path matches a rule
 func matchesRule(path string, rule Rule, debug bool) bool {
 	debugLog(debug, "Checking if path '%s' matches rule '%s'", path, rule.Name)
+	block := normalizedRuleBlock(rule.Block)
+	pattern := normalizedRulePattern(rule.Pattern)
+	exclude := strings.TrimSpace(rule.Exclude)
 
 	// Check if block matches before checking the pattern
-	if rule.Block != "*" && rule.Block != "**" {
+	if block != "*" && block != "**" {
 		// Check if path is exactly a block or starts with a block
 		// For example, for block "axel.fix" path "axel.fix.username" should match
 		// Also check if block exactly matches the path, as in case of "axel.fix" and "axel.fix"
-		if path != rule.Block && !strings.HasPrefix(path, rule.Block+".") {
-			debugLog(debug, "Path '%s' does not start with or equal to block '%s'", path, rule.Block)
+		if path != block && !strings.HasPrefix(path, block+".") {
+			debugLog(debug, "Path '%s' does not start with or equal to block '%s'", path, block)
 			return false
 		}
 	}
 
 	// Handle special case for pattern being double asterisk
-	if rule.Pattern == "**" {
+	if pattern == "**" {
 		debugLog(debug, "Pattern '**' matches everything")
 		return true
 	}
@@ -445,22 +450,22 @@ func matchesRule(path string, rule Rule, debug bool) bool {
 
 	// For empty path, only match wildcard patterns
 	if path == "" {
-		return rule.Pattern == "*" || rule.Pattern == "**"
+		return pattern == "*" || pattern == "**"
 	}
 
 	// Handle pattern matching on the last part of the path
 	// If path equals block (e.g., axel.fix), take the full path, not just the last part
 	var partToMatch string
-	if path == rule.Block {
+	if path == block {
 		partToMatch = path
 	} else {
 		// If path contains block as a prefix (e.g., axel.fix.username),
 		// take the remaining part of the path without the block for matching
-		if strings.HasPrefix(path, rule.Block+".") {
+		if strings.HasPrefix(path, block+".") {
 			// Extract the part of the path after the block
-			restPath := strings.TrimPrefix(path, rule.Block+".")
+			restPath := strings.TrimPrefix(path, block+".")
 			// If pattern contains *, apply it to the rest of the path
-			if strings.Contains(rule.Pattern, "*") {
+			if strings.Contains(pattern, "*") {
 				partToMatch = restPath
 			} else {
 				// Otherwise use the last part of the path
@@ -475,16 +480,16 @@ func matchesRule(path string, rule Rule, debug bool) bool {
 	}
 
 	// Check if pattern matches the part
-	if !matchesPattern(partToMatch, rule.Pattern, debug) {
-		debugLog(debug, "Part '%s' does not match pattern '%s'", partToMatch, rule.Pattern)
+	if !matchesPattern(partToMatch, pattern, debug) {
+		debugLog(debug, "Part '%s' does not match pattern '%s'", partToMatch, pattern)
 		return false
 	}
 
 	// Check exclude pattern if present
-	if rule.Exclude != "" {
+	if exclude != "" {
 		lastPart := parts[len(parts)-1]
-		if matchesPattern(lastPart, rule.Exclude, debug) {
-			debugLog(debug, "Path '%s' matches exclude pattern '%s'", path, rule.Exclude)
+		if matchesPattern(lastPart, exclude, debug) {
+			debugLog(debug, "Path '%s' matches exclude pattern '%s'", path, exclude)
 			return false
 		}
 	}
@@ -1618,6 +1623,10 @@ const (
 var includeRangeRegex = regexp.MustCompile(`\[(\d+)-(\d+)\]`)
 
 func isExplicitIncludeRuleFile(pattern string) bool {
+	pattern = strings.TrimSpace(pattern)
+	if pattern == "" {
+		return false
+	}
 	return !strings.ContainsAny(pattern, "*?") && !includeRangeRegex.MatchString(pattern)
 }
 
@@ -1632,8 +1641,14 @@ func loadIncludedRules(rulePatterns []string, configDir string, debug bool, labe
 	var includedRules []Rule
 
 	for _, rulePattern := range rulePatterns {
-		if isExplicitIncludeRuleFile(rulePattern) {
-			resolvedPattern := resolveIncludePattern(rulePattern, configDir)
+		pattern := strings.TrimSpace(rulePattern)
+		if pattern == "" {
+			debugLog(debug, "Skipping empty %s pattern entry", label)
+			continue
+		}
+
+		if isExplicitIncludeRuleFile(pattern) {
+			resolvedPattern := resolveIncludePattern(pattern, configDir)
 			rules, err := loadRulesFromFile(resolvedPattern, debug)
 			if err != nil {
 				return nil, fmt.Errorf("failed to load %s from file '%s': %w", label, rulePattern, err)
@@ -1642,7 +1657,7 @@ func loadIncludedRules(rulePatterns []string, configDir string, debug bool, labe
 			continue
 		}
 
-		rules, err := loadRulesFromPattern(rulePattern, configDir, debug)
+		rules, err := loadRulesFromPattern(pattern, configDir, debug)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load %s from pattern '%s': %w", label, rulePattern, err)
 		}
@@ -1787,6 +1802,8 @@ func checkDuplicateRules(rules []Rule, debug bool) []string {
 
 	for i, rule := range rules {
 		action := normalizedRuleAction(rule.Action)
+		block := normalizedRuleBlock(rule.Block)
+		pattern := normalizedRulePattern(rule.Pattern)
 
 		// Check for duplicate rule names
 		if previousLine, exists := nameMap[rule.Name]; exists {
@@ -1801,21 +1818,21 @@ func checkDuplicateRules(rules []Rule, debug bool) []string {
 		}
 
 		// Check for duplicate rule configurations (block + pattern + action)
-		if _, exists := ruleMap[rule.Block]; !exists {
-			ruleMap[rule.Block] = make(map[string]map[string]int)
+		if _, exists := ruleMap[block]; !exists {
+			ruleMap[block] = make(map[string]map[string]int)
 		}
-		if _, exists := ruleMap[rule.Block][rule.Pattern]; !exists {
-			ruleMap[rule.Block][rule.Pattern] = make(map[string]int)
+		if _, exists := ruleMap[block][pattern]; !exists {
+			ruleMap[block][pattern] = make(map[string]int)
 		}
-		if line, exists := ruleMap[rule.Block][rule.Pattern][action]; exists {
+		if line, exists := ruleMap[block][pattern][action]; exists {
 			// Calculate actual line numbers in YAML file
 			duplicateLine := i*linesPerRule + firstRuleOffset
 			originalLine := line*linesPerRule + firstRuleOffset
 			msg := fmt.Sprintf("Duplicate rule configuration found: line %d: rule '%s' (block: '%s', pattern: '%s', action: '%s') duplicates rule at line %d",
-				duplicateLine, rule.Name, rule.Block, rule.Pattern, action, originalLine)
+				duplicateLine, rule.Name, block, pattern, action, originalLine)
 			duplicates = append(duplicates, msg)
 		} else {
-			ruleMap[rule.Block][rule.Pattern][action] = i
+			ruleMap[block][pattern][action] = i
 		}
 	}
 
@@ -1840,9 +1857,9 @@ func processRules(path string, rules []Rule, debug bool) (string, bool) {
 		}
 	}
 
-	// Then check rules with other actions
+	// Then check rules with encrypt action
 	for _, rule := range rules {
-		if normalizedRuleAction(rule.Action) != ActionNone && matchesRule(path, rule, debug) {
+		if normalizedRuleAction(rule.Action) == ActionEncrypt && matchesRule(path, rule, debug) {
 			debugLog(debug, "Path %s matches rule %s for encryption", path, rule.Name)
 			return rule.Name, true
 		}
@@ -2182,7 +2199,7 @@ func showDiff(data *yaml.Node, key, operation string, unsecureDiff bool, debug b
 	debugLog(debug, "[showDiff] Config path is: '%s', type: %T", configPath, configPath)
 
 	// Setting global variable for masking in logs
-	unsecureDiffLog = unsecureDiff
+	unsecureDiffLog.Store(unsecureDiff)
 	debugLog(debug, "Starting showDiff with operation: %s, unsecureDiff: %v", operation, unsecureDiff)
 
 	if unsecureDiff {
@@ -2232,7 +2249,7 @@ func showDiff(data *yaml.Node, key, operation string, unsecureDiff bool, debug b
 
 	// Then process all rules, skipping excluded paths
 	for _, rule := range rules {
-		if normalizedRuleAction(rule.Action) != ActionNone {
+		if normalizedRuleAction(rule.Action) == ActionEncrypt {
 			debugLog(debug, "Processing rule: %s", rule.Name)
 			if err := processYAMLWithExclusions(encryptedData.Content[0], key, operation, rule, "", make(map[string]bool), excludedPaths, debug); err != nil {
 				debugLog(debug, "Error processing YAML: %v", err)
@@ -2316,8 +2333,8 @@ func processScalarNodeForDiff(node *yaml.Node, key, operation string, isOriginal
 
 // isSensitiveValue determines if a value is sensitive
 // We consider sensitive all strings that are not AES256 labels and longer than 6 characters
-// If unsecureDiff == true, then we don't consider values as sensitive, except for passwords
-var unsecureDiffLog bool = false // Global variable to store unsecureDiff value
+// If unsecureDiff == true, then we don't consider values as sensitive, except for passwords.
+var unsecureDiffLog atomic.Bool
 
 var (
 	diffOutputMu sync.RWMutex
@@ -2342,13 +2359,15 @@ func getDiffOutput() io.Writer {
 }
 
 func isSensitiveValue(value string) bool {
+	lowered := strings.ToLower(value)
+
 	// Always consider highly sensitive passwords and encryption keys
-	if strings.Contains(strings.ToLower(value), "password") ||
-		strings.Contains(value, "YED_ENCRYPTION_KEY") {
+	if strings.Contains(lowered, "password") ||
+		strings.Contains(lowered, "yed_encryption_key") {
 		return true
 	}
 
-	if unsecureDiffLog {
+	if unsecureDiffLog.Load() {
 		return false // Don't mask anything else if unsecureDiffLog is true
 	}
 
@@ -2473,6 +2492,9 @@ func markExcludedPaths(node *yaml.Node, rule Rule, currentPath string, excludedP
 	if node == nil {
 		return nil
 	}
+	if excludedPaths == nil {
+		excludedPaths = make(map[string]bool)
+	}
 
 	// Check if block matches before checking the pattern
 	if currentPath != "" {
@@ -2530,6 +2552,15 @@ func markExcludedPathsSequence(node *yaml.Node, rule Rule, currentPath string, e
 func processYAMLWithExclusions(node *yaml.Node, key, operation string, rule Rule, currentPath string, processedPaths, excludedPaths map[string]bool, debug bool) error {
 	if node == nil {
 		return nil
+	}
+	if !isValidOperation(operation) {
+		return fmt.Errorf("invalid operation: %s", operation)
+	}
+	if processedPaths == nil {
+		processedPaths = make(map[string]bool)
+	}
+	if excludedPaths == nil {
+		excludedPaths = make(map[string]bool)
 	}
 
 	// Check if this path should be excluded
@@ -2869,6 +2900,14 @@ func normalizedRuleAction(action string) string {
 		return ActionEncrypt
 	}
 	return normalized
+}
+
+func normalizedRuleBlock(block string) string {
+	return strings.TrimSpace(block)
+}
+
+func normalizedRulePattern(pattern string) string {
+	return strings.TrimSpace(pattern)
 }
 
 func isValidRuleAction(action string) bool {
