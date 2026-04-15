@@ -1589,30 +1589,7 @@ func validateRules(config *Config, debug bool) error {
 	if !isRuleValidationEnabled(config) || len(config.Encryption.Rules) == 0 {
 		return nil
 	}
-
-	// Basic validation - check for required fields
-	for _, rule := range config.Encryption.Rules {
-		if rule.Block == "" {
-			return fmt.Errorf("rule '%s' is missing block", rule.Name)
-		}
-		if rule.Pattern == "" {
-			return fmt.Errorf("rule '%s' is missing pattern", rule.Name)
-		}
-	}
-
-	// Check for duplicate rules
-	if duplicates := checkDuplicateRules(config.Encryption.Rules, debug); len(duplicates) > 0 {
-		// If in debug mode, log all duplicates but still return an error for the first one
-		if debug {
-			for _, dup := range duplicates {
-				debugLog(debug, "[WARN] Duplicate rule found: %s", dup)
-			}
-		}
-		// Return first duplicate as error
-		return fmt.Errorf("rule conflict detected: %s", duplicates[0])
-	}
-
-	return nil
+	return ValidateRules(config.Encryption.Rules, debug)
 }
 
 func isRuleValidationEnabled(config *Config) bool {
@@ -2854,10 +2831,10 @@ func LoadAdditionalRules(config *Config, configDir string, debug bool) ([]Rule, 
 func ValidateRules(rules []Rule, debug bool) error {
 	// Basic validation - check for required fields
 	for _, rule := range rules {
-		if rule.Block == "" {
+		if strings.TrimSpace(rule.Block) == "" {
 			return fmt.Errorf("rule '%s' is missing block", rule.Name)
 		}
-		if rule.Pattern == "" {
+		if strings.TrimSpace(rule.Pattern) == "" {
 			return fmt.Errorf("rule '%s' is missing pattern", rule.Name)
 		}
 		if !isValidRuleAction(rule.Action) {

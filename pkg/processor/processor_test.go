@@ -2840,6 +2840,94 @@ func TestValidateRulesRejectsInvalidAction(t *testing.T) {
 	}
 }
 
+func TestValidateRulesDetectsDuplicateRulesWithNormalizedAction(t *testing.T) {
+	rules := []Rule{
+		{
+			Name:    "rule-none-1",
+			Block:   "data",
+			Pattern: "**",
+			Action:  "none",
+		},
+		{
+			Name:    "rule-none-2",
+			Block:   "data",
+			Pattern: "**",
+			Action:  " NONE ",
+		},
+	}
+
+	err := ValidateRules(rules, false)
+	if err == nil {
+		t.Fatal("ValidateRules() expected duplicate conflict error, got nil")
+	}
+	if !strings.Contains(err.Error(), "rule conflict detected") {
+		t.Fatalf("ValidateRules() error = %v, want rule conflict detected", err)
+	}
+}
+
+func TestValidateRulesTreatsEmptyActionAsEncryptForDuplicateDetection(t *testing.T) {
+	rules := []Rule{
+		{
+			Name:    "rule-default-action",
+			Block:   "data",
+			Pattern: "**",
+			Action:  "",
+		},
+		{
+			Name:    "rule-explicit-encrypt",
+			Block:   "data",
+			Pattern: "**",
+			Action:  "encrypt",
+		},
+	}
+
+	err := ValidateRules(rules, false)
+	if err == nil {
+		t.Fatal("ValidateRules() expected duplicate conflict error, got nil")
+	}
+	if !strings.Contains(err.Error(), "rule conflict detected") {
+		t.Fatalf("ValidateRules() error = %v, want rule conflict detected", err)
+	}
+}
+
+func TestValidateRulesRejectsWhitespaceBlock(t *testing.T) {
+	rules := []Rule{
+		{
+			Name:    "invalid-whitespace-block",
+			Block:   "   ",
+			Pattern: "**",
+			Action:  ActionEncrypt,
+		},
+	}
+
+	err := ValidateRules(rules, false)
+	if err == nil {
+		t.Fatal("ValidateRules() expected error for whitespace block, got nil")
+	}
+	if !strings.Contains(err.Error(), "is missing block") {
+		t.Fatalf("ValidateRules() error = %v, want missing block message", err)
+	}
+}
+
+func TestValidateRulesRejectsWhitespacePattern(t *testing.T) {
+	rules := []Rule{
+		{
+			Name:    "invalid-whitespace-pattern",
+			Block:   "data",
+			Pattern: "   ",
+			Action:  ActionEncrypt,
+		},
+	}
+
+	err := ValidateRules(rules, false)
+	if err == nil {
+		t.Fatal("ValidateRules() expected error for whitespace pattern, got nil")
+	}
+	if !strings.Contains(err.Error(), "is missing pattern") {
+		t.Fatalf("ValidateRules() error = %v, want missing pattern message", err)
+	}
+}
+
 // Helper function to get a node by path
 func getNodeByPathAdditional(root *yaml.Node, path string) *yaml.Node {
 	if root == nil {
