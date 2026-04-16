@@ -1805,17 +1805,18 @@ func checkDuplicateRules(rules []Rule, debug bool) []string {
 		action := normalizedRuleAction(rule.Action)
 		block := normalizedRuleBlock(rule.Block)
 		pattern := normalizedRulePattern(rule.Pattern)
+		nameKey := strings.TrimSpace(rule.Name)
 
 		// Check for duplicate rule names
-		if previousLine, exists := nameMap[rule.Name]; exists {
+		if previousLine, exists := nameMap[nameKey]; exists {
 			// Calculate actual line numbers in YAML file
 			duplicateLine := i*linesPerRule + firstRuleOffset
 			originalLine := previousLine*linesPerRule + firstRuleOffset
 			msg := fmt.Sprintf("Duplicate rule name found: line %d: rule '%s' duplicates rule name at line %d",
-				duplicateLine, rule.Name, originalLine)
+				duplicateLine, nameKey, originalLine)
 			duplicates = append(duplicates, msg)
 		} else {
-			nameMap[rule.Name] = i
+			nameMap[nameKey] = i
 		}
 
 		// Check for duplicate rule configurations (block + pattern + action)
