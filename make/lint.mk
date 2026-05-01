@@ -39,7 +39,7 @@ staticcheck: ## Run staticcheck across all packages
 		echo "staticcheck not found, installing $(STATICCHECK_VERSION)..."; \
 		go install honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSION); \
 	fi; \
-	"$(STATICCHECK_BIN)" ./...
+	GOFLAGS="-buildvcs=false" "$(STATICCHECK_BIN)" ./...
 	@echo "Staticcheck passed!"
 
 # Run all checks (linter and staticcheck)

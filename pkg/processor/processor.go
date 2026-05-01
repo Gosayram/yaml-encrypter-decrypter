@@ -96,13 +96,7 @@ func fixBase64Padding(encrypted string, debug bool) string {
 
 	switch remainder {
 	case Base64NoPadding:
-		// Check special case for strings of length 4
-		// 'YWJj' should have one padding character 'YWJj='
-		if len(trimmed) == 4 && trimmed == "YWJj" {
-			paddedEncrypted = trimmed + "="
-		} else {
-			paddedEncrypted = trimmed
-		}
+		paddedEncrypted = trimmed
 	case Base64InvalidPad:
 		// Invalid Base64 string, but still try to fix it
 		paddedEncrypted = trimmed + "==="
@@ -1198,12 +1192,31 @@ func needsQuoting(value string) bool {
 	if strings.HasPrefix(value, " ") || strings.HasSuffix(value, " ") {
 		return true
 	}
-	if strings.Contains(value, ": ") || strings.Contains(value, " #") {
+
+	// YAML 1.2 core schema keywords
+	lower := strings.ToLower(value)
+	if lower == "true" || lower == "false" || lower == "null" || value == "~" {
 		return true
 	}
-	if strings.HasPrefix(value, "- ") || strings.HasPrefix(value, "? ") || strings.HasPrefix(value, "!") {
+
+	// Check if it looks like a number to avoid ambiguity
+	if _, err := strconv.ParseInt(value, 0, 64); err == nil {
 		return true
 	}
+	if _, err := strconv.ParseFloat(value, 64); err == nil {
+		return true
+	}
+
+	// Special characters at the beginning
+	if strings.ContainsAny(string(value[0]), "!&*%?|-<>@`\"'#") {
+		return true
+	}
+
+	// Characters that are special in YAML inside the string
+	if strings.Contains(value, ": ") || strings.Contains(value, "#") || strings.ContainsAny(value, "[]{}, ") {
+		return true
+	}
+
 	return false
 }
 
@@ -2022,6 +2035,9 @@ func logNodeDetails(node *yaml.Node, path string, debug bool) {
 
 // shouldSkipNode checks if a node should be skipped
 func shouldSkipNode(node *yaml.Node, debug bool) bool {
+	if node == nil {
+		return true
+	}
 	if node.Style == yaml.FlowStyle || node.Value == "" {
 		debugLog(debug, "Skipping node with flow style or empty value")
 		return true

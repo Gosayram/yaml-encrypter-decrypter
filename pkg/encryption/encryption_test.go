@@ -797,3 +797,453 @@ func TestSetDefaultAlgorithmIgnoresInvalidValue(t *testing.T) {
 		t.Errorf("Default algorithm changed on invalid input, got %s, want %s", got, Argon2idAlgorithm)
 	}
 }
+
+func TestSecureLog(t *testing.T) {
+	// Enable debug mode temporarily
+	origDebug := debugMode
+	debugMode = true
+	defer func() { debugMode = origDebug }()
+
+	// We just ensure it doesn't panic. Testing output would require capturing stdout.
+	secureLog("test %s %d %x", "secret", 123, []byte("secret"))
+}
+
+func TestAlgorithmToIndicator(t *testing.T) {
+	tests := []struct {
+		algo    KeyDerivationAlgorithm
+		want    byte
+		wantErr bool
+	}{
+		{Argon2idAlgorithm, Argon2idIndicator, false},
+		{PBKDF2SHA256Algorithm, PBKDF2SHA256Indicator, false},
+		{PBKDF2SHA512Algorithm, PBKDF2SHA512Indicator, false},
+		{"unknown", 0, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.algo), func(t *testing.T) {
+			got, err := algorithmToIndicator(tt.algo)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("algorithmToIndicator() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("algorithmToIndicator() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDecompress_Error(t *testing.T) {
+	_, err := decompress([]byte("invalid gzip data"))
+	if err == nil {
+		t.Error("Expected error from decompress with invalid data")
+	}
+}
+
+func TestExtractMetadata_Errors(t *testing.T) {
+	tests := []struct {
+		name string
+		data string
+	}{
+		{"empty", ""},
+		{"invalid base64", "v2;ts=123;alg=argon2id;!!!"},
+		{"too short", "v2;ts=123;alg=argon2id;" + base64.StdEncoding.EncodeToString([]byte("short"))},
+		{"legacy too short", base64.StdEncoding.EncodeToString([]byte("short"))},
+		{"unsupported version", "v3;ts=123;alg=argon2id;YWJj"},
+		{"missing ts", "v2;invalid=123;alg=argon2id;YWJj"},
+		{"missing alg", "v2;ts=123;invalid=argon2id;YWJj"},
+		{"malformed ts", "v2;ts=abc;alg=argon2id;YWJj"},
+		{"malformed alg", "v2;ts=123;alg=unknown;YWJj"},
+		{"empty payload", "v2;ts=123;alg=argon2id;"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ExtractMetadata(tt.data)
+			if err == nil {
+				t.Errorf("ExtractMetadata() expected error for %s", tt.name)
+			}
+		})
+	}
+}
+
+func TestResolveDecryptionAlgorithms(t *testing.T) {
+	// Test legacy PBKDF2 logic
+	candidates, err := resolveDecryptionAlgorithms(legacyPBKDF2Indicator)
+	if err != nil {
+		t.Fatalf("resolveDecryptionAlgorithms() error = %v", err)
+	}
+	if len(candidates) != 2 || candidates[0] != PBKDF2SHA256Algorithm || candidates[1] != PBKDF2SHA512Algorithm {
+		t.Errorf("resolveDecryptionAlgorithms(legacyPBKDF2Indicator) = %v", candidates)
+	}
+
+	// Test unknown indicator
+	_, err = resolveDecryptionAlgorithms(0xFF)
+	if err == nil {
+		t.Error("resolveDecryptionAlgorithms(0xFF) expected error")
+	}
+
+	// Test indicatorToAlgorithm unknown
+	_, err = indicatorToAlgorithm(0xFF)
+	if err == nil {
+		t.Error("indicatorToAlgorithm(0xFF) expected error")
+	}
+
+	// Test legacy pbkdf2 indicatorToAlgorithm
+	_, err = indicatorToAlgorithm(legacyPBKDF2Indicator)
+	if err == nil {
+		t.Error("indicatorToAlgorithm(legacyPBKDF2Indicator) expected error")
+	}
+}
+
+func TestAlgorithmToIndicator_Error(t *testing.T) {
+	_, err := algorithmToIndicator("unsupported")
+	if err == nil {
+		t.Error("algorithmToIndicator() expected error")
+	}
+}
+
+func TestExtractMetadata_Valid(t *testing.T) {
+	// Encrypt some data first to get a valid ciphertext
+	key := "HighlySecureAndUniquePass-2024!"
+	plaintext := "hello world"
+	ciphertext, err := Encrypt(key, plaintext)
+	if err != nil {
+		t.Fatalf("Encrypt() error = %v", err)
+	}
+
+	meta, err := ExtractMetadata(ciphertext)
+	if err != nil {
+		t.Fatalf("ExtractMetadata() error = %v", err)
+	}
+
+	if meta.Algorithm != Argon2idAlgorithm {
+		t.Errorf("ExtractMetadata() algorithm = %v, want %v", meta.Algorithm, Argon2idAlgorithm)
+	}
+}
+
+func TestPasswordValidation_Coverage(t *testing.T) {
+	t.Run("containsCyrillic", func(t *testing.T) {
+		if !containsCyrillic("passwordпароль") {
+			t.Error("containsCyrillic() should be true for mixed English/Cyrillic")
+		}
+		if containsCyrillic("password123!") {
+			t.Error("containsCyrillic() should be false for English only")
+		}
+	})
+	t.Run("isCommonPassword", func(t *testing.T) {
+		if !isCommonPassword("1234567890") {
+			t.Error("isCommonPassword() should be true for 1234567890")
+		}
+		if isCommonPassword("HighlySecureAndUnique-2024!") {
+			t.Error("isCommonPassword() should be false for unique password")
+		}
+	})
+}
+
+func TestEncryptStyleSuffix(t *testing.T) {
+	key := "HighlySecureAndUniquePass-2024!"
+	plaintext := "test data|"
+	encrypted, err := Encrypt(key, plaintext)
+	if err != nil {
+		t.Fatalf("Encrypt() error = %v", err)
+	}
+	if !strings.Contains(encrypted, "v2;") {
+		t.Error("Encrypt() should work with style suffix")
+	}
+
+	plaintext2 := "test data>"
+	_, err = Encrypt(key, plaintext2)
+	if err != nil {
+		t.Fatalf("Encrypt() with > error = %v", err)
+	}
+}
+
+func TestDeriveKey_Error(t *testing.T) {
+	_, err := deriveKey("pass", nil, "invalid")
+	if err == nil {
+		t.Error("deriveKey() with invalid algo should return error")
+	}
+}
+
+func TestIndicatorToAlgorithm_Error(t *testing.T) {
+	_, err := indicatorToAlgorithm(0xFF)
+	if err == nil {
+		t.Error("expected error for invalid indicator")
+	}
+}
+
+func TestDecryptToString_Error(t *testing.T) {
+	_, err := DecryptToString("invalid", "HighlySecureAndUniquePass-2024!")
+	if err == nil {
+		t.Error("expected error")
+	}
+}
+
+func TestDeriveKey_Default(t *testing.T) {
+	_, err := deriveKey("pass", nil, "unknown")
+	if err == nil {
+		t.Error("expected error")
+	}
+}
+
+func TestEncrypt_EmptyAlgoInSlice(t *testing.T) {
+	_, err := Encrypt("HighlySecureAndUniquePass-2024!", "data", "")
+	if err != nil {
+		t.Errorf("Encrypt with empty algo string should use default")
+	}
+}
+
+func TestMin_Coverage(t *testing.T) {
+	if min(1, 2) != 1 {
+		t.Error("min(1, 2) != 1")
+	}
+	if min(2, 1) != 1 {
+		t.Error("min(2, 1) != 1")
+	}
+}
+
+func TestResolveDecryptionAlgorithms_Coverage(t *testing.T) {
+	res, err := resolveDecryptionAlgorithms(Argon2idIndicator)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res) != 1 || res[0] != Argon2idAlgorithm {
+		t.Errorf("got %v", res)
+	}
+
+	_, err = resolveDecryptionAlgorithms(0xFF)
+	if err == nil {
+		t.Error("expected error for invalid indicator")
+	}
+
+	res, err = resolveDecryptionAlgorithms(legacyPBKDF2Indicator)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res) != 2 {
+		t.Errorf("expected 2 algorithms for legacy PBKDF2, got %d", len(res))
+	}
+}
+
+func TestExtractMetadata_NoEnvelope(t *testing.T) {
+	key := "HighlySecureAndUniquePass-2024!"
+	encrypted, _ := Encrypt(key, "data")
+	parts := strings.Split(encrypted, ";")
+	base64Part := parts[len(parts)-1]
+
+	meta, err := ExtractMetadata(base64Part)
+	if err != nil {
+		t.Errorf("ExtractMetadata failed: %v", err)
+	}
+	if meta.Algorithm == "" {
+		t.Error("expected algorithm to be resolved from payload")
+	}
+}
+
+func TestEncrypt_InvalidAlgoCoverage(t *testing.T) {
+	_, err := Encrypt("HighlySecureAndUniquePass-2024!", "data", "invalid")
+	if err == nil {
+		t.Error("expected error for invalid algo")
+	}
+}
+
+func TestExtractMetadata_PayloadTooShortCoverage(t *testing.T) {
+	key := "HighlySecureAndUniquePass-2024!"
+	encrypted, _ := Encrypt(key, "data")
+	parts := strings.Split(encrypted, ";")
+	parts[len(parts)-1] = base64.StdEncoding.EncodeToString([]byte("abc"))
+	invalidCipher := strings.Join(parts, ";")
+
+	_, err := ExtractMetadata(invalidCipher)
+	if err == nil {
+		t.Error("expected error for too short payload")
+	}
+}
+
+func TestParseCipherPayload_WrongMagicCoverage(t *testing.T) {
+	payload := []byte("WRONGPAYLOAD")
+	_, _, _, _, _, _, _, err := parseCipherPayload(payload)
+	if err == nil {
+		t.Error("expected error for wrong magic")
+	}
+}
+
+func TestParseCipherPayload_WrongVersionCoverage(t *testing.T) {
+	payload := []byte("YED" + string(byte(0xFF)) + "0000000000" + "a")
+	_, _, _, _, _, _, _, err := parseCipherPayload(payload)
+	if err == nil {
+		t.Error("expected error for wrong version")
+	}
+}
+
+func TestResolveDecryptionAlgorithms_ExplicitCoverage(t *testing.T) {
+	res, err := resolveDecryptionAlgorithms(Argon2idIndicator, PBKDF2SHA256Algorithm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res) != 1 || res[0] != PBKDF2SHA256Algorithm {
+		t.Errorf("got %v", res)
+	}
+}
+
+func TestIndicatorToAlgorithm_AllCoverage(t *testing.T) {
+	indicators := []byte{Argon2idIndicator, legacyArgon2Indicator, PBKDF2SHA256Indicator, PBKDF2SHA512Indicator}
+	for _, ind := range indicators {
+		_, err := indicatorToAlgorithm(ind)
+		if err != nil {
+			t.Errorf("failed for %x", ind)
+		}
+	}
+
+	_, err := indicatorToAlgorithm(legacyPBKDF2Indicator)
+	if err == nil || !strings.Contains(err.Error(), "ambiguous") {
+		t.Errorf("expected ambiguous error for legacy PBKDF2, got %v", err)
+	}
+}
+
+func TestMin_EqualCoverage(t *testing.T) {
+	if min(1, 1) != 1 {
+		t.Error("min(1, 1) != 1")
+	}
+}
+
+func TestAlgorithmToIndicator_DefaultCoverage(t *testing.T) {
+	_, err := algorithmToIndicator("unknown")
+	if err == nil {
+		t.Error("expected error")
+	}
+}
+
+func TestParseCipherPayload_TooShortCoverage(t *testing.T) {
+	payload := make([]byte, 57)
+	copy(payload, "YED")
+	payload[3] = byte(headerV2Version)
+	_, _, _, _, _, _, _, err := parseCipherPayload(payload)
+	if err == nil {
+		t.Error("expected error for too short payload")
+	}
+}
+
+func TestParseCipherPayload_InvalidTimestampCoverage(t *testing.T) {
+	payload := make([]byte, 91)
+	copy(payload, "YED")
+	payload[3] = byte(headerV2Version)
+	copy(payload[4:], "XXXXXXXXXX")
+	_, _, _, _, _, _, _, err := parseCipherPayload(payload)
+	if err == nil {
+		t.Error("expected error for invalid timestamp")
+	}
+}
+
+func TestDecrypt_EnvelopeErrorCoverage(t *testing.T) {
+	_, err := Decrypt("HighlySecureAndUniquePass-2024!", "v2;too;short")
+	if err == nil {
+		t.Error("expected error")
+	}
+}
+
+func TestParseVisibleCipherEnvelope_InvalidTimestampCoverage(t *testing.T) {
+	_, _, err := parseVisibleCipherEnvelope("v2;ts=XXX;alg=a;base64")
+	if err == nil {
+		t.Error("expected error")
+	}
+}
+
+func TestParseVisibleCipherEnvelope_ErrorsCoverage(t *testing.T) {
+	_, _, err := parseVisibleCipherEnvelope("v2;ts=123;alg=argon2id") // missing payload
+	if err == nil {
+		t.Error("expected malformed structure error")
+	}
+
+	_, _, err = parseVisibleCipherEnvelope("v2;xs=123;alg=argon2id;base64") // missing ts
+
+	if err == nil {
+		t.Error("expected missing ts field error")
+	}
+
+	_, _, err = parseVisibleCipherEnvelope("v2;ts=123;xlg=argon2id;base64") // missing alg
+	if err == nil {
+		t.Error("expected missing alg field error")
+	}
+
+	_, _, err = parseVisibleCipherEnvelope("v2;ts=123;alg=argon2id;") // empty payload
+	if err == nil {
+		t.Error("expected empty payload error")
+	}
+}
+
+func TestExtractMetadata_EmptyAndInvalidBase64(t *testing.T) {
+	_, err := ExtractMetadata("")
+	if err == nil {
+		t.Error("expected error for empty ciphertext")
+	}
+
+	_, err = ExtractMetadata("v2;ts=1714580000;alg=argon2id;invalid-base64!!!")
+	if err == nil {
+		t.Error("expected error for invalid base64")
+	}
+}
+
+func TestExtractMetadata_EnvelopeMetaMerge(t *testing.T) {
+	// Create a valid encrypted string
+	key := "HighlySecureAndUniquePass-2024!"
+	encrypted, _ := Encrypt(key, "data")
+
+	// We can't easily change meta.FormatVersion because it's inside the encrypted payload.
+	// But we can test if meta.CreatedAt is merged when it's zero in the payload (unlikely)
+	// or just hit the lines.
+	meta, err := ExtractMetadata(encrypted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if meta.FormatVersion != 2 {
+		t.Errorf("expected format version 2, got %d", meta.FormatVersion)
+	}
+}
+
+func TestSecureLog_Coverage(t *testing.T) {
+	orig := debugMode
+	debugMode = true
+	defer func() { debugMode = orig }()
+	secureLog("test %s", "arg")
+}
+
+func TestExtractMetadata_MalformedPayloadCoverage(t *testing.T) {
+	// Valid magic but wrong version
+	payload := []byte("YED" + string(byte(0xFF)) + strings.Repeat("0", 54))
+	b64 := base64.StdEncoding.EncodeToString(payload)
+	_, err := ExtractMetadata(b64)
+	if err == nil {
+		t.Error("expected error for wrong version")
+	}
+}
+
+func TestExtractMetadata_MergeCoverage(t *testing.T) {
+	// Binary payload with version 1 (no YED prefix, treated as legacy)
+	binary := make([]byte, 77)
+	binary[0] = Argon2idIndicator
+	b64 := base64.StdEncoding.EncodeToString(binary)
+	// Envelope with version 2
+	env := "v2;ts=1714580000;alg=argon2id;" + b64
+	meta, err := ExtractMetadata(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if meta.FormatVersion != 2 {
+		t.Errorf("expected version 2 from envelope, got %d", meta.FormatVersion)
+	}
+	if meta.Algorithm != Argon2idAlgorithm {
+		t.Errorf("expected algo argon2id from envelope, got %s", meta.Algorithm)
+	}
+}
+
+func TestParseCipherPayload_WrongVersionLongCoverage(t *testing.T) {
+	payload := make([]byte, 91)
+	copy(payload, "YED")
+	payload[3] = byte(0xFF)
+	_, _, _, _, _, _, _, err := parseCipherPayload(payload)
+	if err == nil {
+		t.Error("expected error for wrong version")
+	}
+}
