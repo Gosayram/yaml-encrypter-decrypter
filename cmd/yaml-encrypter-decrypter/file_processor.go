@@ -6,8 +6,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/atlet99/yaml-encrypter-decrypter/pkg/logger"
-	"github.com/atlet99/yaml-encrypter-decrypter/pkg/processor"
+	"github.com/Gosayram/yaml-encrypter-decrypter/pkg/logger"
+	"github.com/Gosayram/yaml-encrypter-decrypter/pkg/processor"
 	"github.com/awnumar/memguard"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"

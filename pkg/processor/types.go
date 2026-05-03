@@ -1,7 +1,7 @@
 package processor
 
 import (
-	"github.com/atlet99/yaml-encrypter-decrypter/pkg/encryption"
+	"github.com/Gosayram/yaml-encrypter-decrypter/pkg/encryption"
 )
 
 // File contains constants and variables for YAML file processing

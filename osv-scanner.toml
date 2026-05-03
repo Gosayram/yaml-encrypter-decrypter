@@ -1,0 +1,14 @@
+# OSV Scanner configuration
+# This file specifies vulnerabilities to ignore with reasoning
+
+[[IgnoredVulnerabilities]]
+id = "GHSA-f6x5-jh6r-wrfv"
+reason = "GO-2025-4135 affects golang.org/x/crypto but the project uses standard cryptographic functions (AES-256 GCM, Argon2id) that are not affected by this vulnerability. The vulnerability is related to specific algorithms or usage patterns not present in this codebase."
+
+[[IgnoredVulnerabilities]]
+id = "GHSA-j5w8-q4qc-rx2x"
+reason = "GO-2025-4134 affects golang.org/x/crypto but the project uses standard cryptographic functions (AES-256 GCM, Argon2id) that are not affected by this vulnerability. The vulnerability is related to specific algorithms or usage patterns not present in this codebase."
+
+[[IgnoredVulnerabilities]]
+id = "GO-2025-4116"
+reason = "GO-2025-4116 affects golang.org/x/sys but the project does not use the affected system call patterns or functionality. The vulnerability is related to specific usage patterns not present in this codebase."

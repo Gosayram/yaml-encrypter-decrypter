@@ -5,7 +5,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/atlet99/yaml-encrypter-decrypter/pkg/encryption"
+	"github.com/Gosayram/yaml-encrypter-decrypter/pkg/encryption"
 	"gopkg.in/yaml.v3"
 )
 

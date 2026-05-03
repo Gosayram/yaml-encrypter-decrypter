@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/atlet99/yaml-encrypter-decrypter/pkg/encryption"
-	"github.com/atlet99/yaml-encrypter-decrypter/pkg/logger"
+	"github.com/Gosayram/yaml-encrypter-decrypter/pkg/encryption"
+	"github.com/Gosayram/yaml-encrypter-decrypter/pkg/logger"
 	"go.uber.org/zap"
 )
 

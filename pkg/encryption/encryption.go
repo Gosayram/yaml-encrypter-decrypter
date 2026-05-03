@@ -19,7 +19,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/atlet99/yaml-encrypter-decrypter/pkg/logger"
+	"github.com/Gosayram/yaml-encrypter-decrypter/pkg/logger"
 	"github.com/awnumar/memguard"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/argon2"

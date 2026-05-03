@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/atlet99/yaml-encrypter-decrypter/pkg/logger"
+	"github.com/Gosayram/yaml-encrypter-decrypter/pkg/logger"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"go.uber.org/multierr"
