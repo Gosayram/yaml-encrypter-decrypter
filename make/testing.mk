@@ -71,7 +71,12 @@ check-config: build prepare-test-examples ## Validate configuration files and ru
 	@# Test with invalid config
 	@echo "=== Testing invalid configuration ==="
 	@echo "encryption:\n  rules:\n    - name: \"invalid_rule\"\n      pattern: \"test\"\n      # Missing block field\n      description: \"This rule is invalid\"" > .test/invalid_config.yml
-	$(OUTPUT_DIR)/$(BINARY_NAME) -validate -config .test/invalid_config.yml -debug || echo "Validation correctly failed for invalid configuration (as expected)"
+	@if $(OUTPUT_DIR)/$(BINARY_NAME) -validate -config .test/invalid_config.yml -debug; then \
+		echo "Error: Validation unexpectedly succeeded for invalid configuration" >&2; \
+		exit 1; \
+	else \
+		echo "Validation correctly failed for invalid configuration (as expected)"; \
+	fi
 	@rm -f .test/invalid_config.yml
 	@# Test with no rules
 	@echo "=== Testing configuration with no rules ==="
@@ -80,7 +85,12 @@ check-config: build prepare-test-examples ## Validate configuration files and ru
 	@rm -f .test/empty_rules_config.yml
 	@# Test with non-existent config
 	@echo "=== Testing non-existent config ==="
-	$(OUTPUT_DIR)/$(BINARY_NAME) -validate -config .test/non_existent_config.yml -debug || echo "Validation correctly failed for non-existent file (as expected)"
+	@if $(OUTPUT_DIR)/$(BINARY_NAME) -validate -config .test/non_existent_config.yml -debug; then \
+		echo "Error: Validation unexpectedly succeeded for non-existent file" >&2; \
+		exit 1; \
+	else \
+		echo "Validation correctly failed for non-existent file (as expected)"; \
+	fi
 	@echo "Configuration validation completed"
 
 # Test rules against example files (without modifying original files)
