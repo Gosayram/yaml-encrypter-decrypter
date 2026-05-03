@@ -3,13 +3,15 @@ package processor
 import (
 	"fmt"
 	"io"
-	"log"
 	"os"
+	"strconv"
 	"strings"
 	"sync/atomic"
 
 	"github.com/atlet99/yaml-encrypter-decrypter/pkg/encryption"
+	"github.com/atlet99/yaml-encrypter-decrypter/pkg/logger"
 	"github.com/awnumar/memguard"
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 )
 
@@ -251,14 +253,16 @@ func processNodeForDiff(node *yaml.Node, key, operation string, isOriginal bool,
 func processScalarNodeForDiff(node *yaml.Node, key, operation string, isOriginal bool, debug bool) {
 	keyBuf := memguard.NewBufferFromBytes([]byte(key))
 	if keyBuf == nil {
-		log.Printf("Failed to create secure buffer for key")
+		logger.L().Error("Failed to create secure buffer for key",
+			zap.String("operation", operation))
 		return
 	}
 	defer keyBuf.Destroy()
 
 	valueBuf := memguard.NewBufferFromBytes([]byte(node.Value))
 	if valueBuf == nil {
-		log.Printf("Failed to create secure buffer for node value")
+		logger.L().Error("Failed to create secure buffer for node value",
+			zap.String("value_length", strconv.Itoa(len(node.Value))))
 		return
 	}
 	defer valueBuf.Destroy()

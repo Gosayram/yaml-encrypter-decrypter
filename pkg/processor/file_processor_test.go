@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/atlet99/yaml-encrypter-decrypter/pkg/encryption"
+	"github.com/atlet99/yaml-encrypter-decrypter/pkg/logger"
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 )
 
@@ -18,6 +20,12 @@ var testUnsecureDiffLog = false
 
 // TestFixBase64Padding tests the fixBase64Padding-like functionality
 func TestFixBase64Padding(t *testing.T) {
+	testLogger := zap.NewExample()
+	logger.ReplaceGlobals(testLogger)
+	defer logger.ReplaceGlobals(logger.L())
+
+	testLogger.Info("Starting TestFixBase64Padding")
+
 	tests := []struct {
 		name     string
 		input    string

@@ -6,11 +6,19 @@ import (
 	"testing"
 
 	"github.com/atlet99/yaml-encrypter-decrypter/pkg/encryption"
+	"github.com/atlet99/yaml-encrypter-decrypter/pkg/logger"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 )
 
 func TestDetectMultilineStyle(t *testing.T) {
+	testLogger := zap.NewExample()
+	logger.ReplaceGlobals(testLogger)
+	defer logger.ReplaceGlobals(logger.L())
+
+	testLogger.Info("Starting TestDetectMultilineStyle")
+
 	tests := []struct {
 		name     string
 		node     *yaml.Node

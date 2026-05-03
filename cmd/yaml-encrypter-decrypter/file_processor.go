@@ -2,13 +2,14 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
 
+	"github.com/atlet99/yaml-encrypter-decrypter/pkg/logger"
 	"github.com/atlet99/yaml-encrypter-decrypter/pkg/processor"
 	"github.com/awnumar/memguard"
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 )
 
@@ -24,7 +25,8 @@ func processFileWithInterruptHandling(flags appFlags, keyBuffer *memguard.Locked
 	// Process file in a goroutine
 	go func() {
 		if flags.diff {
-			log.Printf("[DEBUG] Before ShowDiff: configPath='%s'", flags.configPath)
+			logger.L().Debug("Before ShowDiff",
+				zap.String("config_path", flags.configPath))
 			errChan <- processor.ShowDiff(flags.filename, string(keyBuffer.Bytes()), flags.operation, flags.debug, flags.configPath)
 			return
 		}
@@ -41,12 +43,12 @@ func processFileWithInterruptHandling(flags appFlags, keyBuffer *memguard.Locked
 	select {
 	case err := <-errChan:
 		if err != nil {
-			log.Printf("Error: %v\n", err)
+			logger.L().Error("Processing error", zap.Error(err))
 			return 1
 		}
 		return 0
 	case <-sigChan:
-		log.Println("Operation interrupted")
+		logger.L().Warn("Operation interrupted")
 		return 1
 	}
 }

@@ -3,9 +3,18 @@ package encryption
 import (
 	"strings"
 	"testing"
+
+	"github.com/atlet99/yaml-encrypter-decrypter/pkg/logger"
+	"go.uber.org/zap"
 )
 
 func TestValidatePasswordStrength(t *testing.T) {
+	testLogger := zap.NewExample()
+	logger.ReplaceGlobals(testLogger)
+	defer logger.ReplaceGlobals(logger.L())
+
+	testLogger.Info("Starting TestValidatePasswordStrength")
+
 	tests := []struct {
 		name     string
 		password string

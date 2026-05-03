@@ -2,13 +2,14 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/atlet99/yaml-encrypter-decrypter/pkg/encryption"
+	"github.com/atlet99/yaml-encrypter-decrypter/pkg/logger"
+	"go.uber.org/zap"
 )
 
 const (
@@ -52,7 +53,7 @@ func runBenchmarks(outputFile string) int {
 
 	// Output results
 	if err := outputBenchmarkResults(results, outputFile); err != nil {
-		log.Printf("Error outputting benchmark results: %v\n", err)
+		logger.L().Error("Failed to output benchmark results", zap.Error(err))
 		return 1
 	}
 
@@ -160,7 +161,7 @@ func runDecryptionBenchmarks() []benchmarkResult {
 	// Prepare standard encrypted data
 	encrypted, err := encryption.Encrypt(TestPassword, plaintext)
 	if err != nil {
-		log.Printf("Failed to prepare encrypted data. Please check the application logs for details.")
+		logger.L().Error("Failed to prepare encrypted data for benchmark")
 		return results
 	}
 
@@ -187,7 +188,9 @@ func runDecryptionBenchmarks() []benchmarkResult {
 	for _, algo := range algorithms {
 		encrypted, err := encryption.Encrypt(TestPassword, plaintext, algo)
 		if err != nil {
-			log.Printf("Failed to prepare encrypted data for %s algorithm.", algo)
+			logger.L().Error("Failed to prepare encrypted data for algorithm",
+				zap.String("algorithm", string(algo)),
+				zap.Error(err))
 			continue
 		}
 		encryptedData[algo] = encrypted

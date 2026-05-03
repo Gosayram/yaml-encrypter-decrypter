@@ -3,15 +3,15 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/atlet99/yaml-encrypter-decrypter/pkg/encryption"
+	"github.com/atlet99/yaml-encrypter-decrypter/pkg/logger"
 	"github.com/atlet99/yaml-encrypter-decrypter/pkg/processor"
-
 	"github.com/awnumar/memguard"
+	"go.uber.org/zap"
 )
 
 // Version is set during build time
@@ -68,10 +68,32 @@ func mainWithExitCode() int {
 	// Parse command line arguments
 	flags, err := parseFlags()
 	if err != nil {
-		log.Println(err)
+		logger.L().Error("Failed to parse flags", zap.Error(err))
 		flag.Usage()
 		return 1
 	}
+
+	// Initialize logger with configuration
+	logCfg := logger.Config{
+		Level:       flags.logLevel,
+		Development: flags.debug,
+		Encoding:    flags.logFormat,
+		OutputPath:  flags.logOutput,
+	}
+	if err := logger.Initialize(logCfg); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
+		return 1
+	}
+	defer func() {
+		_ = logger.Sync()
+	}()
+
+	logger.L().Info("Application starting",
+		zap.String("version", Version),
+		zap.Bool("debug", flags.debug),
+		zap.String("log_level", flags.logLevel),
+		zap.String("log_format", flags.logFormat),
+	)
 
 	// Show version if requested
 	if flags.showVersion {
@@ -91,7 +113,7 @@ func mainWithExitCode() int {
 	if flags.configPath != "" {
 		configFilePath = flags.configPath
 		if flags.debug {
-			log.Printf("Using custom config path: %s\n", configFilePath)
+			logger.L().Debug("Using custom config path", zap.String("path", configFilePath))
 		}
 	}
 
@@ -101,10 +123,12 @@ func mainWithExitCode() int {
 		if err == nil {
 			configFilePath = absPath
 			if flags.debug {
-				log.Printf("Using absolute config path: %s\n", configFilePath)
+				logger.L().Debug("Using absolute config path", zap.String("path", configFilePath))
 			}
 		} else {
-			log.Printf("Warning: could not convert %s to absolute path: %v\n", configFilePath, err)
+			logger.L().Warn("Could not convert to absolute path",
+				zap.String("path", configFilePath),
+				zap.Error(err))
 		}
 	}
 
@@ -119,14 +143,17 @@ func mainWithExitCode() int {
 	// Get encryption key (from flag or environment)
 	key, err := getEncryptionKey(flags.key, flags.debug)
 	if err != nil {
-		log.Println(err)
+		logger.L().Error("Failed to get encryption key", zap.Error(err))
 		flag.Usage()
 		return 1
 	}
 
 	// Validate required flags
 	if flags.filename == "" || key == "" || flags.operation == "" {
-		log.Println("Error: filename, key, and operation are required")
+		logger.L().Error("Missing required arguments",
+			zap.String("filename", flags.filename),
+			zap.Bool("has_key", key != ""),
+			zap.String("operation", flags.operation))
 		flag.Usage()
 		return 1
 	}
@@ -134,7 +161,7 @@ func mainWithExitCode() int {
 	// Validate and set algorithm flag if provided
 	keyDerivation, err := encryption.ValidateAlgorithm(flags.algorithm)
 	if err != nil {
-		log.Println(err)
+		logger.L().Error("Invalid algorithm", zap.String("algorithm", flags.algorithm), zap.Error(err))
 		return 1
 	}
 
@@ -145,7 +172,7 @@ func mainWithExitCode() int {
 	// Load rules from config file
 	rules, _, err := processor.LoadRules(configFilePath, flags.debug)
 	if err != nil {
-		log.Printf("Error loading rules: %v\n", err)
+		logger.L().Error("Failed to load rules", zap.String("config", configFilePath), zap.Error(err))
 		return 1
 	}
 
@@ -154,7 +181,7 @@ func mainWithExitCode() int {
 		// Parse comma-separated list of rule files.
 		additionalRules, err := parseRequiredIncludeRulePatterns(flags.includeRules)
 		if err != nil {
-			log.Printf("Error: %v\n", err)
+			logger.L().Error("Invalid include rules pattern", zap.String("pattern", flags.includeRules), zap.Error(err))
 			return 1
 		}
 
@@ -167,7 +194,7 @@ func mainWithExitCode() int {
 		// Try to load the additional rule files
 		additionalRulesLoaded, _, err := processor.LoadAdditionalRules(&tempConfig, filepath.Dir(configFilePath), flags.debug)
 		if err != nil {
-			log.Printf("Error loading additional rules: %v\n", err)
+			logger.L().Error("Failed to load additional rules", zap.Error(err))
 			return 1
 		}
 
@@ -176,7 +203,7 @@ func mainWithExitCode() int {
 		copy(allRules, rules)
 		allRules = append(allRules, additionalRulesLoaded...)
 		if err := processor.ValidateRules(allRules, flags.debug); err != nil {
-			log.Printf("Error validating combined rules: %v\n", err)
+			logger.L().Error("Failed to validate combined rules", zap.Error(err))
 			return 1
 		}
 
@@ -184,13 +211,16 @@ func mainWithExitCode() int {
 		rules = append(rules, additionalRulesLoaded...)
 
 		if flags.debug {
-			log.Printf("Added %d additional rules from command line\n", len(additionalRulesLoaded))
+			logger.L().Debug("Added additional rules from command line",
+				zap.Int("count", len(additionalRulesLoaded)),
+				zap.Strings("patterns", additionalRules))
 		}
 	}
 
 	// Set the encryption algorithm if specified
 	if keyDerivation != "" {
 		encryption.SetDefaultAlgorithm(keyDerivation)
+		logger.L().Info("Key derivation algorithm set", zap.String("algorithm", string(keyDerivation)))
 	}
 
 	// Process file and handle interruption
@@ -199,39 +229,38 @@ func mainWithExitCode() int {
 
 // validateConfiguration validates the configuration file and all included rule files
 func validateConfiguration(configPath string, debug bool, includeRulePatterns string) int {
-	log.Printf("Validating configuration file: %s\n", configPath)
+	logger.L().Info("Validating configuration", zap.String("path", configPath))
 
 	// Attempt to load rules which will validate the configuration
 	rules, config, err := processor.LoadRules(configPath, debug)
 	if err != nil {
-		log.Printf("Error: %v\n", err)
+		logger.L().Error("Failed to load configuration", zap.String("path", configPath), zap.Error(err))
 		return 1
 	}
 
 	// Output validation success
 	if len(rules) == 0 {
-		log.Printf("Warning: No rules found in configuration. No encryption/decryption will be performed.\n")
+		logger.L().Warn("No rules found in configuration")
 	} else {
-		log.Printf("Configuration is valid.\n")
-		log.Printf("Total rules loaded: %d\n", len(rules))
+		logger.L().Info("Configuration is valid",
+			zap.Int("rules_count", len(rules)))
 	}
 
 	// If include_rules is specified in config, show details
 	if len(config.Encryption.IncludeRules) > 0 {
-		log.Printf("External rule files included in config: %d\n", len(config.Encryption.IncludeRules))
-		for _, pattern := range config.Encryption.IncludeRules {
-			log.Printf("  - %s\n", pattern)
-		}
+		logger.L().Info("External rule files included in config",
+			zap.Int("count", len(config.Encryption.IncludeRules)),
+			zap.Strings("patterns", config.Encryption.IncludeRules))
 	}
 
 	// Process additional rule files from command line if specified
 	if includeRulePatterns != "" {
-		log.Printf("Processing additional rule files from command line: %s\n", includeRulePatterns)
+		logger.L().Info("Processing additional rule files from command line", zap.String("patterns", includeRulePatterns))
 
 		// Parse comma-separated list of rule files.
 		additionalRules, err := parseRequiredIncludeRulePatterns(includeRulePatterns)
 		if err != nil {
-			log.Printf("Error: %v\n", err)
+			logger.L().Error("Invalid include rules pattern", zap.String("pattern", includeRulePatterns), zap.Error(err))
 			return 1
 		}
 
@@ -244,7 +273,7 @@ func validateConfiguration(configPath string, debug bool, includeRulePatterns st
 		// Try to load the additional rule files
 		additionalRulesLoaded, _, err := processor.LoadAdditionalRules(&tempConfig, filepath.Dir(configPath), debug)
 		if err != nil {
-			log.Printf("Error loading additional rules: %v\n", err)
+			logger.L().Error("Failed to load additional rules", zap.Error(err))
 			return 1
 		}
 
@@ -253,18 +282,17 @@ func validateConfiguration(configPath string, debug bool, includeRulePatterns st
 		copy(allRules, rules)
 		allRules = append(allRules, additionalRulesLoaded...)
 		if err := processor.ValidateRules(allRules, debug); err != nil {
-			log.Printf("Error validating combined rules: %v\n", err)
+			logger.L().Error("Failed to validate combined rules", zap.Error(err))
 			return 1
 		}
 
-		log.Printf("Added %d additional rules from command line\n", len(additionalRulesLoaded))
-		for _, pattern := range additionalRules {
-			log.Printf("  - %s\n", pattern)
-		}
+		logger.L().Info("Added additional rules from command line",
+			zap.Int("count", len(additionalRulesLoaded)),
+			zap.Strings("patterns", additionalRules))
 	}
 
 	// Display unsecure_diff setting
-	log.Printf("Unsecure diff mode: %v\n", config.Encryption.UnsecureDiff)
+	logger.L().Info("Unsecure diff mode", zap.Bool("enabled", config.Encryption.UnsecureDiff))
 
 	return 0
 }

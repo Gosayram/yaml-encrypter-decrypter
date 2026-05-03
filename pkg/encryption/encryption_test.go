@@ -9,6 +9,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/atlet99/yaml-encrypter-decrypter/pkg/logger"
+	"go.uber.org/zap"
 )
 
 func decodeCipherForTest(t *testing.T, ciphertext string) ([]byte, *CipherMetadata) {
@@ -36,6 +39,12 @@ func encodeCipherForTest(raw []byte, envelopeMeta *CipherMetadata) string {
 }
 
 func TestEncryptDecrypt(t *testing.T) {
+	testLogger := zap.NewExample()
+	logger.ReplaceGlobals(testLogger)
+	defer logger.ReplaceGlobals(logger.L())
+
+	testLogger.Info("Starting TestEncryptDecrypt")
+
 	tests := []struct {
 		name          string
 		key           string

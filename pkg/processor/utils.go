@@ -3,35 +3,39 @@ package processor
 import (
 	"fmt"
 	"strings"
+
+	"github.com/atlet99/yaml-encrypter-decrypter/pkg/logger"
 )
 
 // debugLog outputs debug messages only if debug mode is enabled
 func debugLog(debug bool, format string, args ...interface{}) {
-	if debug {
-		// Mask any arguments that might contain sensitive data
-		safeArgs := make([]interface{}, len(args))
-		for i, arg := range args {
-			if strArg, ok := arg.(string); ok {
-				// Check for encryption keys or passwords
-				if strings.Contains(strings.ToLower(format), "password") ||
-					strings.Contains(strings.ToLower(format), "key") ||
-					strings.Contains(strArg, "YED_ENCRYPTION_KEY") ||
-					strings.Contains(strings.ToLower(format), "length") ||
-					strings.Contains(strings.ToLower(format), "size") ||
-					strings.Contains(strings.ToLower(format), "compressed") ||
-					strings.Contains(strings.ToLower(format), "decompressed") ||
-					strings.Contains(strings.ToLower(format), "style") {
-					safeArgs[i] = "********"
-				} else {
-					safeArgs[i] = arg
-				}
+	if !debug {
+		return
+	}
+
+	// Mask any arguments that might contain sensitive data
+	safeArgs := make([]interface{}, len(args))
+	for i, arg := range args {
+		if strArg, ok := arg.(string); ok {
+			// Check for encryption keys or passwords
+			if strings.Contains(strings.ToLower(format), "password") ||
+				strings.Contains(strings.ToLower(format), "key") ||
+				strings.Contains(strArg, "YED_ENCRYPTION_KEY") ||
+				strings.Contains(strings.ToLower(format), "length") ||
+				strings.Contains(strings.ToLower(format), "size") ||
+				strings.Contains(strings.ToLower(format), "compressed") ||
+				strings.Contains(strings.ToLower(format), "decompressed") ||
+				strings.Contains(strings.ToLower(format), "style") {
+				safeArgs[i] = "********"
 			} else {
 				safeArgs[i] = arg
 			}
+		} else {
+			safeArgs[i] = arg
 		}
-
-		fmt.Printf("[DEBUG] "+format+"\n", safeArgs...)
 	}
+
+	logger.L().Debug(fmt.Sprintf(format, safeArgs...))
 }
 
 // maskEncryptedValue masks the encrypted value

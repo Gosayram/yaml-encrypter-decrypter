@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/atlet99/yaml-encrypter-decrypter/pkg/logger"
 	"github.com/awnumar/memguard"
 	"golang.org/x/crypto/argon2"
 	"golang.org/x/crypto/pbkdf2"
@@ -159,7 +160,7 @@ func secureLog(format string, args ...interface{}) {
 		}
 	}
 
-	fmt.Printf(safeFormat, safeArgs...)
+	logger.L().Debug(fmt.Sprintf(safeFormat, safeArgs...))
 }
 
 // Encrypt encrypts a plaintext string using AES-256 GCM with the specified key derivation algorithm and returns a base64-encoded ciphertext.

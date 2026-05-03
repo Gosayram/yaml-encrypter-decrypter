@@ -14,10 +14,23 @@ import (
 	"testing"
 
 	"github.com/atlet99/yaml-encrypter-decrypter/pkg/encryption"
+	"github.com/atlet99/yaml-encrypter-decrypter/pkg/logger"
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 )
 
+// initTestLogger initializes the logger for tests
+func initTestLogger(t *testing.T) *zap.Logger {
+	return zap.NewExample()
+}
+
 func TestProcessFile(t *testing.T) {
+	testLogger := initTestLogger(t)
+	logger.ReplaceGlobals(testLogger)
+	defer logger.ReplaceGlobals(logger.L())
+
+	testLogger.Info("Starting TestProcessFile")
+
 	tests := []struct {
 		name      string
 		filename  string
@@ -62,9 +75,20 @@ func TestProcessFile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			testLogger.Debug("Running test case",
+				zap.String("test", tt.name),
+				zap.String("filename", tt.filename),
+				zap.Bool("debug", tt.debug))
+
 			err := ProcessFileHelper(tt.filename, tt.key, tt.operation, tt.debug)
 			if (err != nil) != tt.wantError {
+				testLogger.Error("Test case failed",
+					zap.String("test", tt.name),
+					zap.Error(err),
+					zap.Bool("want_error", tt.wantError))
 				t.Errorf("ProcessFile() error = %v, wantError %v", err, tt.wantError)
+			} else {
+				testLogger.Info("Test case passed", zap.String("test", tt.name))
 			}
 		})
 	}

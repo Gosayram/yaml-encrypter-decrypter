@@ -25,6 +25,10 @@ type appFlags struct {
 	configPath    string
 	validateRules bool
 	includeRules  string
+	// Logging configuration
+	logLevel  string
+	logFormat string
+	logOutput string
 }
 
 // parseFlags parses command line arguments and returns an appFlags struct
@@ -77,6 +81,11 @@ func parseFlags() (appFlags, error) {
 	flag.StringVar(&flags.includeRules, "include-rules", "", "Comma-separated list of additional rule files to include")
 	flag.StringVar(&flags.includeRules, "i", "", "")
 
+	// Logging configuration flags
+	flag.StringVar(&flags.logLevel, "log-level", "info", "Log level (debug, info, warn, error)")
+	flag.StringVar(&flags.logFormat, "log-format", "console", "Log format (console, json)")
+	flag.StringVar(&flags.logOutput, "log-output", "stderr", "Log output (stdout, stderr, or file path)")
+
 	// Override default usage
 	flag.Usage = func() {
 		fmt.Fprintln(os.Stderr, "A tool for encrypting and decrypting YAML files while preserving formatting.")
@@ -103,6 +112,9 @@ func parseFlags() (appFlags, error) {
 
 		fmt.Fprintln(os.Stderr, "Logging and Information:")
 		fmt.Fprintln(os.Stderr, "  -debug, -v            		Enable detailed debug logging")
+		fmt.Fprintln(os.Stderr, "  -log-level            		Log level (debug, info, warn, error)")
+		fmt.Fprintln(os.Stderr, "  -log-format           		Log format (console, json)")
+		fmt.Fprintln(os.Stderr, "  -log-output           		Log output (stdout, stderr, or file path)")
 		fmt.Fprintln(os.Stderr, "  -version, -V          		Display version and build information")
 		fmt.Fprintln(os.Stderr, "")
 
