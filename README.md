@@ -2,7 +2,7 @@
 
 # YAML Encrypter-Decrypter (`yed`)
 
-![Go version](https://img.shields.io/github/go-mod/go-version/Gosayram/yaml-encrypter-decrypter/main?style=flat&label=go-version) [![Docker Image Version](https://img.shields.io/docker/v/zetfolder17/yaml-encrypter-decrypter?label=docker%20image&sort=semver)](https://hub.docker.com/r/zetfolder17/yaml-encrypter-decrypter) ![Docker Image Size](https://img.shields.io/docker/image-size/zetfolder17/yaml-encrypter-decrypter/latest) [![CI](https://github.com/Gosayram/yaml-encrypter-decrypter/actions/workflows/ci.yml/badge.svg)](https://github.com/Gosayram/yaml-encrypter-decrypter/actions/workflows/ci.yml) [![GitHub contributors](https://img.shields.io/github/contributors/Gosayram/yaml-encrypter-decrypter)](https://github.com/Gosayram/yaml-encrypter-decrypter/graphs/contributors/) [![Go Report Card](https://goreportcard.com/badge/github.com/Gosayram/yaml-encrypter-decrypter)](https://goreportcard.com/report/github.com/Gosayram/yaml-encrypter-decrypter) [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/Gosayram/yaml-encrypter-decrypter/badge)](https://securityscorecards.dev/viewer/?uri=github.com/Gosayram/yaml-encrypter-decrypter) ![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/Gosayram/yaml-encrypter-decrypter?sort=semver) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/Gosayram/yaml-encrypter-decrypter/blob/main/LICENSE) [![CodeQL](https://github.com/Gosayram/yaml-encrypter-decrypter/actions/workflows/codeql.yml/badge.svg)](https://github.com/Gosayram/yaml-encrypter-decrypter/actions/workflows/codeql.yml)
+![Go version](https://img.shields.io/github/go-mod/go-version/Gosayram/yaml-encrypter-decrypter/main?style=flat&label=go-version) [![Docker Image Version](https://img.shields.io/docker/v/zetfolder17/yaml-encrypter-decrypter?label=docker%20image&sort=semver)](https://hub.docker.com/r/zetfolder17/yaml-encrypter-decrypter) ![Docker Image Size](https://img.shields.io/docker/image-size/zetfolder17/yaml-encrypter-decrypter/latest) [![CI](https://github.com/Gosayram/yaml-encrypter-decrypter/actions/workflows/ci-go-lint.yml/badge.svg)](https://github.com/Gosayram/yaml-encrypter-decrypter/actions/workflows/ci-go-lint.yml) [![GitHub contributors](https://img.shields.io/github/contributors/Gosayram/yaml-encrypter-decrypter)](https://github.com/Gosayram/yaml-encrypter-decrypter/graphs/contributors/) [![Go Report Card](https://goreportcard.com/badge/github.com/Gosayram/yaml-encrypter-decrypter)](https://goreportcard.com/report/github.com/Gosayram/yaml-encrypter-decrypter) [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/Gosayram/yaml-encrypter-decrypter/badge)](https://securityscorecards.dev/viewer/?uri=github.com/Gosayram/yaml-encrypter-decrypter) ![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/Gosayram/yaml-encrypter-decrypter?sort=semver) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/Gosayram/yaml-encrypter-decrypter/blob/main/LICENSE) [![CodeQL](https://github.com/Gosayram/yaml-encrypter-decrypter/actions/workflows/codeql.yml/badge.svg)](https://github.com/Gosayram/yaml-encrypter-decrypter/actions/workflows/codeql.yml)
 
 
 *A Go-based CLI tool for encrypting and decrypting sensitive data in YAML files. It uses modern encryption algorithms and a robust configuration system to ensure your data is securely handled.*
@@ -135,7 +135,8 @@ The performance of different key derivation algorithms has been extensively benc
 | pbkdf2-sha256 | 7,838          | 160,589      | 44,796        | 30        |
 | pbkdf2-sha512 | 3,909          | 313,596      | 45,372        | 30        |
 
-**Note:** These benchmarks were performed on an Apple M3 Pro processor. Performance may vary based on hardware.
+> [!NOTE]
+> These benchmarks were performed on an Apple M3 Pro processor. Performance may vary based on hardware.
 
 You can generate benchmark reports for your own system using:
 ```bash
@@ -145,6 +146,29 @@ make benchmark-report
 ---
 
 ## **How It Works**
+
+### **Encryption Flow**
+
+```mermaid
+flowchart TD
+    A[Input YAML File] --> B[Read Configuration]
+    B --> C[Apply Rules]
+    C --> D{Encrypt Value?}
+    D -->|Yes| E[Generate Salt 32 bytes]
+    E --> F[Derive Key with KDF]
+    F --> G{Algorithm}
+    G -->|Argon2id| H[Argon2id 9MB 4 iters]
+    G -->|PBKDF2-SHA256| I[PBKDF2 600K iters]
+    G -->|PBKDF2-SHA512| J[PBKDF2 210K iters]
+    H --> K[Compress with gzip]
+    I --> K
+    J --> K
+    K --> L[AES-256 GCM Encrypt]
+    L --> M[Compute HMAC]
+    M --> N[Encode Base64]
+    N --> O[Output Encrypted YAML]
+    D -->|No| O
+```
 
 ### **Encryption**
 1. The provided plaintext is compressed using `gzip` to reduce size.
@@ -193,6 +217,9 @@ The tool provides comprehensive support for encrypting and decrypting multiline 
 5. **Seamless Operation**: No special configuration needed - multiline handling works automatically.
 
 #### **Multiline Encryption Examples**
+
+<details>
+<summary>Click to expand multiline YAML encryption examples</summary>
 
 **Original YAML with multiline content:**
 ```yaml
@@ -272,6 +299,8 @@ certificates:
   quoted_public_key: "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA\nxWzg9vJJR0TIIu5XzCQG\n-----END PUBLIC KEY-----"
 ```
 
+</details>
+
 #### **Multiline Processing Works**
 
 When processing multiline YAML content, the tool:
@@ -292,7 +321,13 @@ This ensures that all forms of multiline content, including certificates and key
 
 ### **Rule Configuration and Inclusion**
 
+> [!TIP]
+> The tool provides a flexible system for configuring encryption/decryption rules with support for rule inclusion from external files.
+
 The tool provides a flexible system for configuring encryption/decryption rules with support for rule inclusion from external files:
+
+<details>
+<summary>Click to expand rule configuration examples</summary>
 
 1. **Basic Rule Configuration**: Rules can be defined directly in the main configuration file:
    ```yaml
@@ -350,6 +385,8 @@ The tool provides a flexible system for configuring encryption/decryption rules 
 
 This flexible system allows for better organization of rules across multiple files, making it easier to manage complex configurations.
 
+</details>
+
 ### **Key Derivation Algorithms**
 Choose from multiple key derivation algorithms with the `--algorithm` flag:
 ```bash
@@ -388,9 +425,206 @@ This helps in troubleshooting and understanding the encryption process without c
 4. The ciphertext is decrypted using **AES-256 GCM**.
 5. The decompressed data is returned as plaintext.
 
+### **Decryption Flow**
+
+```mermaid
+flowchart TD
+    A[Encrypted YAML File] --> B[Read Configuration]
+    B --> C[Apply Rules]
+    C --> D{Decrypt Value?}
+    D -->|Yes| E[Decode Base64]
+    E --> F[Split Components]
+    F --> G[Extract Salt]
+    G --> H[Regenerate Key with KDF]
+    H --> I{Algorithm}
+    I -->|Argon2id| J[Argon2id 9MB 4 iters]
+    I -->|PBKDF2-SHA256| K[PBKDF2 600K iters]
+    I -->|PBKDF2-SHA512| L[PBKDF2 210K iters]
+    J --> M[Verify HMAC]
+    K --> M
+    L --> M
+    M --> N{HMAC Valid?}
+    N -->|Yes| O[AES-256 GCM Decrypt]
+    N -->|No| P[Error: Integrity Check Failed]
+    O --> Q[Decompress gzip]
+    Q --> R[Output Decrypted YAML]
+    D -->|No| R
+```
+
+### **System Architecture**
+
+```mermaid
+flowchart TB
+    subgraph CLI["Command Line Interface"]
+        A[yed CLI]
+    end
+
+    subgraph Config["Configuration Layer"]
+        B[".yed_config.yml"]
+        C[Rule Files]
+    end
+
+    subgraph Processor["Processing Engine"]
+        D[YAML Parser]
+        E[Rule Engine]
+        F[Encryption Module]
+        G[Decryption Module]
+    end
+
+    subgraph Crypto["Cryptographic Layer"]
+        H[Key Derivation]
+        I[AES-256 GCM]
+        J[HMAC]
+        K[memguard]
+    end
+
+    A --> B
+    A --> C
+    B --> D
+    C --> E
+    D --> F
+    D --> G
+    F --> H
+    F --> I
+    F --> J
+    G --> H
+    G --> I
+    G --> J
+    H --> K
+    I --> K
+    J --> K
+```
+
+### **Rule Processing Flow**
+
+```mermaid
+flowchart TD
+    A[Load .yed_config.yml] --> B[Parse Main Rules]
+    B --> C[Load Include Rules]
+    C --> D{Validate Rules?}
+    D -->|Yes| E[Check for Duplicates]
+    E --> F[Check Conflicts]
+    F --> G[Check Required Fields]
+    G --> H{Validation Passed?}
+    H -->|Yes| I[Merge All Rules]
+    H -->|No| J[Error: Invalid Configuration]
+    I --> K[Sort Rules by Priority]
+    K --> L[Apply Rules to YAML]
+```
+
+### **Encrypted Value Structure**
+
+```mermaid
+flowchart LR
+    A[Encrypted Value] --> B[Base64 Decoded]
+    B --> C[Format: AES256:base64data]
+    C --> D[Decode Base64]
+    D --> E[Extract Components]
+    E --> F[Salt 32 bytes]
+    E --> G[Nonce 12 bytes]
+    E --> H[Ciphertext]
+    E --> I[HMAC 32 bytes]
+    F --> J[Key Derivation]
+    G --> K[AES-256 GCM]
+    H --> K
+    I --> L[HMAC Verification]
+    J --> K
+    K --> L
+    L --> M{HMAC Valid?}
+    M -->|Yes| N[Decrypt Data]
+    M -->|No| O[Error]
+    N --> P[Decompress]
+    P --> Q[Plaintext]
+```
+
+### **KDF Algorithm Comparison**
+
+```mermaid
+flowchart LR
+    subgraph Argon2id["Argon2id"]
+        A1[Memory: 9 MB]
+        A2[Iterations: 4]
+        A3[Threads: 1]
+        A4[Security: High]
+        A5[Performance: Slower]
+    end
+
+    subgraph PBKDF2_256["PBKDF2-SHA256"]
+        B1[Memory: Low]
+        B2[Iterations: 600K]
+        B3[Threads: 1]
+        B4[Security: High]
+        B5[Performance: 170x Faster]
+    end
+
+    subgraph PBKDF2_512["PBKDF2-SHA512"]
+        C1[Memory: Low]
+        C2[Iterations: 210K]
+        C3[Threads: 1]
+        C4[Security: High]
+        C5[Performance: 78x Faster]
+    end
+
+    A1 --> B1
+    A2 --> B2
+    A3 --> C3
+    A4 --> B4
+    A5 --> C5
+```
+
+### **Multiline YAML Processing**
+
+```mermaid
+flowchart TD
+    A[Input YAML Value] --> B{Multiline?}
+    B -->|Yes| C{Has Style Marker?}
+    B -->|No| D[Process as Single-line]
+    C -->|Yes| E[Restore Original Style]
+    C -->|No| F{Contains PEM Pattern?}
+    F -->|Yes| G[Use Literal Style]
+    F -->|No| H{Has Escaped Newlines?}
+    H -->|Yes| I[Use Quoted Style]
+    H -->|No| J[Detect YAML Style]
+    E --> K[Apply Style]
+    G --> K
+    I --> K
+    J --> K
+    D --> L[Standard Processing]
+    K --> L
+```
+
+### **Security Features Overview**
+
+```mermaid
+mindmap
+    root((Security))
+        Memory Protection
+            memguard
+            Protected Buffers
+            Auto Cleanup
+            Signal Handling
+        Cryptography
+            AES-256 GCM
+            Argon2id KDF
+            PBKDF2 KDF
+            HMAC-SHA256
+        Validation
+            Password Strength
+            Minimum 15 chars
+            Common Password Check
+            Character Variety
+        Data Integrity
+            HMAC Verification
+            Base64 Validation
+            Encrypted Data Check
+```
+
 ---
 
 ## **Getting Started**
+
+> [!TIP]
+> **Prerequisites**: Ensure you have Go 1.25.8 and Make installed before proceeding.
 
 ### **Requirements**
 - Go 1.25.8 installed.
@@ -454,6 +688,9 @@ encryption:
 
 ### **Rule Configuration**
 
+> [!NOTE]
+> Rules in `.yed_config.yml` define which parts of your YAML file should be encrypted or skipped.
+
 Rules in `.yed_config.yml` define which parts of your YAML file should be encrypted or skipped. Each rule consists of:
 
 - `name`: A unique identifier for the rule
@@ -470,6 +707,9 @@ Rules in `.yed_config.yml` define which parts of your YAML file should be encryp
    - `**` matches any number of nested fields
    - `*` matches any characters within a single field name
    - Exact matches take precedence over patterns
+
+<details>
+<summary>Click to expand example rule applications</summary>
 
 **Example Rule Applications:**
 
@@ -490,12 +730,18 @@ With the example rules above:
 - All fields under `axel.fix` will be skipped (not encrypted)
 - Any field matching `pass*` in other blocks will be encrypted
 
+</details>
+
 ### **Environment Variable**
+
+> [!IMPORTANT]
+> **Security Notice**: The encryption key is sensitive. Never commit it to version control or share it publicly.
 
 Override the encryption key with `YED_ENCRYPTION_KEY`:
 ```bash
 export YED_ENCRYPTION_KEY="my-super-p@s$w0rd123"
 ```
+
 **Password Requirements:**
 - **Minimum**: 15 characters
 - **Maximum**: 64 characters (supports passphrases)
@@ -504,7 +750,11 @@ export YED_ENCRYPTION_KEY="my-super-p@s$w0rd123"
 
 ### **Command-Line Interface**
 
-*The tool provides various options to encrypt and decrypt data:*
+> [!NOTE]
+> The tool provides various options to encrypt and decrypt data.
+
+<details>
+<summary>Click to expand available CLI options</summary>
 
 **Available Options:**
 ```
@@ -539,6 +789,8 @@ export YED_ENCRYPTION_KEY="my-super-p@s$w0rd123"
     -log-output, -O string Log output (stdout, stderr, or file path)
 ```
 
+</details>
+
 ### **Process a YAML File**
 
 **Encrypt or decrypt a YAML file:**
@@ -569,6 +821,12 @@ smart_config.auth.password:
 ---
 
 ### **Makefile Commands**
+
+> [!NOTE]
+> The project provides a comprehensive Makefile for building, testing, and running the project.
+
+<details>
+<summary>Click to expand available Makefile commands</summary>
 
 | Target                    | Description                                                            |
 | ------------------------- | ---------------------------------------------------------------------- |
@@ -605,7 +863,12 @@ smart_config.auth.password:
 | make run-image            | Run Docker image with --version flag.                                  |
 | make help                 | Display help information for Makefile targets.                         |
 
+</details>
+
 ### **Testing Capabilities**
+
+> [!TIP]
+> The project provides comprehensive testing capabilities including automated tests, manual tests, and performance benchmarks.
 
 The project provides comprehensive testing capabilities:
 
@@ -649,6 +912,9 @@ make benchmark-report
 
 ### **Docker Support**
 
+> [!NOTE]
+> The tool can be built and run inside a Docker container for isolated environments.
+
 The tool can be built and run inside a Docker container:
 
 ```bash
@@ -660,6 +926,9 @@ make run-image
 ```
 
 ### **Advanced Features**
+
+> [!TIP]
+> Advanced features provide additional flexibility and control over encryption/decryption operations.
 
 #### **Multiple Key Derivation Algorithms**
 

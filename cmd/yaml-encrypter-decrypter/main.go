@@ -20,7 +20,7 @@ var (
 	mainLogger = logger.Named("app")
 )
 
-// Version is set during build time
+// Version is set during build time and should be in the format "major.minor"
 var Version = "dev"
 
 const (
