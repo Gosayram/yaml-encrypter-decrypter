@@ -3,7 +3,7 @@ name: ✨ Feature Request
 about: Suggest a new feature or enhancement
 title: '[FEATURE] Brief description of the feature'
 labels: ['enhancement', 'good first issue']
-assignees: ['atlet99']
+assignees: ['Gosayram']
 
 ---
 
