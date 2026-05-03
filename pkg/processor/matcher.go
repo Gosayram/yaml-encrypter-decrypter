@@ -229,7 +229,7 @@ func processRules(path string, rules []Rule, debug bool) (string, bool) {
 
 	// Check rules with action=none first
 	for _, rule := range rules {
-		if normalizedRuleAction(rule.Action) == ActionNone && matchesRule(path, rule, debug) {
+		if normalizedRuleAction(rule.Action) == ActionNone && globalRuleMatcher.Matches(path, rule, debug) {
 			debugLog(debug, "Path %s matches 'none' action rule %s - skipping encryption", path, rule.Name)
 			return "", false
 		}
@@ -237,7 +237,7 @@ func processRules(path string, rules []Rule, debug bool) (string, bool) {
 
 	// Then check rules with encrypt action
 	for _, rule := range rules {
-		if normalizedRuleAction(rule.Action) == ActionEncrypt && matchesRule(path, rule, debug) {
+		if normalizedRuleAction(rule.Action) == ActionEncrypt && globalRuleMatcher.Matches(path, rule, debug) {
 			debugLog(debug, "Path %s matches rule %s for encryption", path, rule.Name)
 			return rule.Name, true
 		}

@@ -9,18 +9,32 @@ import (
 func ValidateRules(rules []Rule, debug bool) error {
 	for _, rule := range rules {
 		if strings.TrimSpace(rule.Block) == "" {
-			return fmt.Errorf("rule '%s' is missing block", rule.Name)
+			return &ValidationError{
+				RuleName: rule.Name,
+				Field:    "block",
+				Reason:   "missing block",
+			}
 		}
 		if strings.TrimSpace(rule.Pattern) == "" {
-			return fmt.Errorf("rule '%s' is missing pattern", rule.Name)
+			return &ValidationError{
+				RuleName: rule.Name,
+				Field:    "pattern",
+				Reason:   "missing pattern",
+			}
 		}
 		if !isValidRuleAction(rule.Action) {
-			return fmt.Errorf("rule '%s' has invalid action", rule.Name)
+			return &ValidationError{
+				RuleName: rule.Name,
+				Field:    "action",
+				Reason:   "invalid action",
+			}
 		}
 	}
 
 	if duplicates := checkDuplicateRules(rules, debug); len(duplicates) > 0 {
-		return fmt.Errorf("rule conflict detected: %s", duplicates[0])
+		return &RuleConflictError{
+			Conflict: duplicates[0],
+		}
 	}
 
 	return nil

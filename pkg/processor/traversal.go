@@ -480,7 +480,7 @@ func markExcludedPaths(node *yaml.Node, rule Rule, currentPath string, excludedP
 	}
 
 	if currentPath != "" {
-		if matchesRule(currentPath, rule, debug) {
+		if globalRuleMatcher.Matches(currentPath, rule, debug) {
 			debugLog(debug, "Marking path for exclusion based on rule '%s': %s", rule.Name, currentPath)
 			excludedPaths[currentPath] = true
 		}
@@ -613,7 +613,7 @@ func processSequenceNodeWithRuleExclusions(node *yaml.Node, key, operation strin
 
 // processScalarNodeWithRuleExclusions processes a scalar node with exclusions
 func processScalarNodeWithRuleExclusions(node *yaml.Node, key, operation string, rule Rule, currentPath string, processedPaths, excludedPaths map[string]bool, debug bool) error {
-	if !excludedPaths[currentPath] && matchesRule(currentPath, rule, debug) {
+	if !excludedPaths[currentPath] && globalRuleMatcher.Matches(currentPath, rule, debug) {
 		debugLog(debug, "Processing scalar node at path: %s", currentPath)
 
 		// Process multiline nodes first

@@ -1453,17 +1453,15 @@ rules:
 
 	// Create a wait group to coordinate goroutines
 	var wg sync.WaitGroup
-	wg.Add(workers)
 
-	// Start parallel processing
+	// Start parallel processing using WaitGroup.Go (Go 1.25+)
 	for i := 0; i < workers; i++ {
-		go func(id int) {
-			defer wg.Done()
+		wg.Go(func() {
 			err := ProcessFile(testFile, strongPassword, OperationEncrypt, false, configFile)
 			if err != nil {
 				t.Errorf("ProcessFile() error = %v, wantError %v", err, false)
 			}
-		}(i)
+		})
 	}
 
 	// Wait for all goroutines to complete
