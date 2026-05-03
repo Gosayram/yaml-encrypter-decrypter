@@ -25,6 +25,22 @@ ci-package: ci-build ## Generate checksums for build artifacts
 ci-all: ci-lint ci-test ci-package ## Run all CI stages locally
 	@echo "All CI stages completed successfully."
 
+### GitHub Actions
+.PHONY: update-github-actions check-github-actions check-github-actions-debug
+
+update-github-actions: ## Update GitHub Actions dependencies to latest commit SHAs
+	@echo "Updating GitHub Actions dependencies..."
+	@python3 scripts/update-github-actions.py
+	@echo "GitHub Actions dependencies updated."
+
+check-github-actions: ## Check for GitHub Actions updates without modifying files
+	@echo "Checking GitHub Actions for updates..."
+	@python3 scripts/update-github-actions.py --check
+
+check-github-actions-debug: ## Check for GitHub Actions updates with debug output
+	@echo "Checking GitHub Actions for updates (debug mode)..."
+	@python3 scripts/update-github-actions.py --check --debug
+
 ### Release
 release-snapshot: ## Build snapshot release with GoReleaser
 	@echo "Running GoReleaser snapshot build..."
