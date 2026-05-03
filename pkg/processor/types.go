@@ -6,40 +6,51 @@ import (
 
 // File contains constants and variables for YAML file processing
 const (
-	// Operations
-	AES              = "AES256:"
+	// AES is the prefix for AES-256 encrypted values
+	AES = "AES256:"
+	// OperationEncrypt is the encryption operation constant
 	OperationEncrypt = "encrypt"
+	// OperationDecrypt is the decryption operation constant
 	OperationDecrypt = "decrypt"
 
-	// Buffer and processing constants
-	DefaultBufferSize    = 1024
-	DefaultIndent        = 2
-	LargeFileThreshold   = 1000
-	MaxParts             = 2
+	// DefaultBufferSize is the default buffer size for I/O operations
+	DefaultBufferSize = 1024
+	// DefaultIndent is the default YAML indentation in spaces
+	DefaultIndent = 2
+	// LargeFileThreshold is the threshold in lines for large file processing
+	LargeFileThreshold = 1000
+	// MaxParts is the maximum number of parts for path splitting
+	MaxParts = 2
+	// MaskLength is the length of the mask for sensitive values
 	MaskLength           = 6
 	MinKeyLength         = 15 // Minimum length for encryption key (NIST SP 800-63B)
 	MinKeyLengthStandard = 20 // Minimum length for encryption key in standard processor
 	minKeyLengthGuard    = 8  // Guardrail for obviously weak keys before KDF validation
 	Base64BlockSize      = 4  // Block size for Base64 encoding
 
-	// Base64 padding constants
-	Base64NoPadding     = 0 // If length % 4 == 0, no padding needed
-	Base64InvalidPad    = 1 // If length % 4 == 1, this is an invalid Base64 string
-	Base64DoublePadding = 2 // If length % 4 == 2, need to add two '==' characters
-	Base64SinglePadding = 3 // If length % 4 == 3, need to add one '=' character
+	// Base64NoPadding indicates no padding is needed for Base64
+	Base64NoPadding = 0
+	// Base64InvalidPad indicates invalid Base64 padding
+	Base64InvalidPad = 1
+	// Base64DoublePadding indicates double padding is needed for Base64
+	Base64DoublePadding = 2
+	// Base64SinglePadding indicates single padding is needed for Base64
+	Base64SinglePadding = 3
 
-	// Action types
-	ActionNone    = "none"
+	// ActionNone is the none action constant
+	ActionNone = "none"
+	// ActionEncrypt is the encrypt action constant
 	ActionEncrypt = "encrypt"
 
-	// Magic numbers
+	// MinEncryptedLength is the minimum length for encrypted values
 	MinEncryptedLength = 6
-	KeyValuePairSize   = 2
+	// KeyValuePairSize is the size of a key-value pair
+	KeyValuePairSize = 2
 
-	// File permissions
-	SecureFileMode = 0600 // Secure file permissions (owner read/write only)
+	// SecureFileMode is the secure file permission mode (owner read/write only)
+	SecureFileMode = 0600
 
-	// Masked value for sensitive information
+	// MaskedValue is the string used to mask sensitive information
 	MaskedValue = "********"
 
 	// EncryptedPrefix is the prefix for encrypted values
@@ -48,17 +59,21 @@ const (
 	// AlgorithmIndicatorLength is the length of the algorithm indicator
 	AlgorithmIndicatorLength = 16
 
-	// Additional YAML node style names (for style suffixes)
-	StyleLiteral      = "literal"
-	StyleFolded       = "folded"
+	// StyleLiteral is the literal style name
+	StyleLiteral = "literal"
+	// StyleFolded is the folded style name
+	StyleFolded = "folded"
+	// StyleDoubleQuoted is the double-quoted style name
 	StyleDoubleQuoted = "double_quoted"
+	// StyleSingleQuoted is the single-quoted style name
 	StyleSingleQuoted = "single_quoted"
-	StylePlain        = "plain"
+	// StylePlain is the plain style name
+	StylePlain = "plain"
 
-	// Constants for parsing YAML files
+	// YAMLIndentSpaces is the number of spaces for YAML indentation
 	YAMLIndentSpaces = 2
 
-	// YAML tag for string
+	// YAMLTagStr is the YAML tag for string type
 	YAMLTagStr = "!!str"
 
 	// Constants for masking encryption keys
@@ -103,7 +118,7 @@ type Config struct {
 	UnsecureDiff bool
 }
 
-// Structure to hold information about folded style sections
+// FoldedStyleSection holds information about folded style sections in YAML
 type FoldedStyleSection struct {
 	Key         string
 	IndentLevel int

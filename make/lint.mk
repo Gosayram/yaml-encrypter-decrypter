@@ -1,5 +1,5 @@
 ### Quality
-.PHONY: fmt vet lint lint-fix install-lint install-staticcheck staticcheck check-all
+.PHONY: fmt vet lint lint-fix install-lint install-staticcheck install-godoclint staticcheck godoclint check-all
 
 # Check formatting of Go code
 fmt: ## Format Go source files in cmd and pkg
@@ -23,6 +23,11 @@ install-staticcheck: ## Install staticcheck pinned version
 	@echo "Installing staticcheck $(STATICCHECK_VERSION)..."
 	@go install honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSION)
 
+# Install godoclint
+install-godoclint: ## Install godoclint latest version
+	@echo "Installing godoclint $(GODOCLINT_VERSION)..."
+	@go install github.com/godoc-lint/godoc-lint/cmd/godoclint@$(GODOCLINT_VERSION)
+
 # Run linter
 lint: ## Run golangci-lint across all packages
 	@echo "Running linter..."
@@ -42,8 +47,18 @@ staticcheck: ## Run staticcheck across all packages
 	GOFLAGS="-buildvcs=false" "$(STATICCHECK_BIN)" ./...
 	@echo "Staticcheck passed!"
 
-# Run all checks (linter and staticcheck)
-check-all: lint staticcheck ## Run all code quality checks
+# Run godoclint tool
+godoclint: ## Run godoclint across all packages
+	@echo "Running godoclint..."
+	@if [ ! -x "$(GODOCLINT_BIN)" ]; then \
+		echo "godoclint not found, installing $(GODOCLINT_VERSION)..."; \
+		go install github.com/godoc-lint/godoc-lint/cmd/godoclint@$(GODOCLINT_VERSION); \
+	fi; \
+	"$(GODOCLINT_BIN)" ./...
+	@echo "Godoclint passed!"
+
+# Run all checks (linter, staticcheck, and godoclint)
+check-all: lint staticcheck godoclint ## Run all code quality checks
 	@echo "All checks completed."
 
 # Run linter with auto-fix

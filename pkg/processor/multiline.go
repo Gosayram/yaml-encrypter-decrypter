@@ -30,12 +30,16 @@ const (
 
 // Style suffix constants
 const (
-	// Style suffix constants for preserving YAML style information
-	LiteralStyleSuffix      = "|literal"
-	FoldedStyleSuffix       = "|folded"
+	// LiteralStyleSuffix is the suffix for literal style preservation
+	LiteralStyleSuffix = "|literal"
+	// FoldedStyleSuffix is the suffix for folded style preservation
+	FoldedStyleSuffix = "|folded"
+	// DoubleQuotedStyleSuffix is the suffix for double-quoted style preservation
 	DoubleQuotedStyleSuffix = "|double_quoted"
+	// SingleQuotedStyleSuffix is the suffix for single-quoted style preservation
 	SingleQuotedStyleSuffix = "|single_quoted"
-	PlainStyleSuffix        = "|plain"
+	// PlainStyleSuffix is the suffix for plain style preservation
+	PlainStyleSuffix = "|plain"
 )
 
 // Constants for configuration file detection

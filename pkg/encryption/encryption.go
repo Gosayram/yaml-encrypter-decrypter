@@ -28,10 +28,12 @@ import (
 type KeyDerivationAlgorithm string
 
 const (
-	// Key derivation algorithms
+	// PBKDF2SHA512Algorithm is the PBKDF2-SHA512 key derivation algorithm
 	PBKDF2SHA512Algorithm KeyDerivationAlgorithm = "pbkdf2-sha512"
+	// PBKDF2SHA256Algorithm is the PBKDF2-SHA256 key derivation algorithm
 	PBKDF2SHA256Algorithm KeyDerivationAlgorithm = "pbkdf2-sha256"
-	Argon2idAlgorithm     KeyDerivationAlgorithm = "argon2id"
+	// Argon2idAlgorithm is the Argon2id key derivation algorithm
+	Argon2idAlgorithm KeyDerivationAlgorithm = "argon2id"
 
 	// Key sizes
 	keySize = 32 // 256 bits for AES-256
@@ -43,7 +45,7 @@ const (
 	// HMAC size
 	hmacSize = 32
 
-	// Algorithm indicator size
+	// AlgorithmIndicatorLength is the length of the algorithm indicator byte
 	AlgorithmIndicatorLength = 1
 
 	// Cipher metadata/header constants (format v2)
@@ -63,18 +65,26 @@ const (
 	argon2MemoryKiB       = 9216 // Memory usage to 9 MiB (OWASP recommendation)
 	argon2ThreadCount     = 1    // Threads (p) as per OWASP recommendation
 
-	// These constants needed for tests
-	Argon2idTime    = 4
-	Argon2idMemory  = 9216
+	// Argon2idTime is the Argon2id time parameter
+	Argon2idTime = 4
+	// Argon2idMemory is the Argon2id memory parameter in KiB
+	Argon2idMemory = 9216
+	// Argon2idThreads is the Argon2id thread count parameter
 	Argon2idThreads = 1
-	Argon2idKeyLen  = 32
-	PBKDF2KeyLen    = 32
+	// Argon2idKeyLen is the Argon2id key length in bytes
+	Argon2idKeyLen = 32
+	// PBKDF2KeyLen is the PBKDF2 key length in bytes
+	PBKDF2KeyLen = 32
 
-	// Constants for algorithm indicators
-	Argon2idIndicator     byte = 0x01
+	// Argon2idIndicator is the byte indicator for Argon2id algorithm
+	Argon2idIndicator byte = 0x01
+	// PBKDF2SHA256Indicator is the byte indicator for PBKDF2-SHA256 algorithm
 	PBKDF2SHA256Indicator byte = 0x02
+	// PBKDF2SHA512Indicator is the byte indicator for PBKDF2-SHA512 algorithm
 	PBKDF2SHA512Indicator byte = 0x03
+	// legacyArgon2Indicator is the legacy byte indicator for Argon2
 	legacyArgon2Indicator byte = 'a'
+	// legacyPBKDF2Indicator is the legacy byte indicator for PBKDF2
 	legacyPBKDF2Indicator byte = 'p'
 
 	// Constants for secure logging

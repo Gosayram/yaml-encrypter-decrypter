@@ -14,10 +14,12 @@ GO_FILES := $(wildcard $(CMD_DIR)/*.go)
 GO_BIN_DIR := $(shell if [ -n "$$(go env GOBIN)" ]; then go env GOBIN; else echo "$$(go env GOPATH)/bin"; fi)
 GOLANGCI_LINT_BIN := $(GO_BIN_DIR)/golangci-lint
 STATICCHECK_BIN := $(GO_BIN_DIR)/staticcheck
+GODOCLINT_BIN := $(GO_BIN_DIR)/godoclint
 
 # Tooling versions (pinned for reproducible CI/local checks)
 GOLANGCI_LINT_VERSION ?= v2.11.4
 STATICCHECK_VERSION ?= v0.7.0
+GODOCLINT_VERSION ?= latest
 
 # Load application targets
 include make/app.mk

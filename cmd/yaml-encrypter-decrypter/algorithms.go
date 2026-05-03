@@ -1,3 +1,4 @@
+// Package main provides the YAML encrypter/decrypter CLI application.
 package main
 
 import (

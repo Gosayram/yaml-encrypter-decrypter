@@ -29,11 +29,14 @@ const (
 	// AllowedSpecialChars contains the set of allowed special characters according to OWASP
 	AllowedSpecialChars = "!@#$%^&*()_+-=[]{}|;:,.<>?"
 
-	// CharacterTypeCounts for password strength evaluation
-	OneCharType    = 1
-	TwoCharTypes   = 2
+	// OneCharType is the count for one character type in password
+	OneCharType = 1
+	// TwoCharTypes is the count for two character types in password
+	TwoCharTypes = 2
+	// ThreeCharTypes is the count for three character types in password
 	ThreeCharTypes = 3
-	FourCharTypes  = 4
+	// FourCharTypes is the count for four character types in password
+	FourCharTypes = 4
 )
 
 var (

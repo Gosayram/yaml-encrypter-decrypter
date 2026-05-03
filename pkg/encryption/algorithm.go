@@ -1,3 +1,5 @@
+// Package encryption provides AES-256 encryption and decryption capabilities
+// with support for multiple key derivation algorithms (PBKDF2, Argon2id).
 package encryption
 
 import (

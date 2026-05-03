@@ -18,7 +18,7 @@ import (
 var Version = "dev"
 
 const (
-	// Version parts
+	// VersionParts is the number of parts in version string
 	VersionParts = 2
 )
 
