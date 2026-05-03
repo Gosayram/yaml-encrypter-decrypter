@@ -4,8 +4,9 @@
 # Generate a benchmark report in Markdown format
 benchmark-report: ## Generate markdown benchmark report
 	@echo "Generating benchmark report..."
+	@command -v rg >/dev/null 2>&1 || { echo "Error: ripgrep (rg) is required for benchmark-report but not installed. Please install ripgrep to continue."; exit 1; }
 	@echo "# Benchmark Results" > benchmark-report.md
-	@echo "\nGenerated on \`$$(date)\`\n" >> benchmark-report.md
+	@printf '%s\n\n' "Generated on \`$$(date)\`" >> benchmark-report.md
 	
 	@echo "## Key Derivation Algorithms" >> benchmark-report.md
 	@echo "| Algorithm | Operations/sec | Time (ns/op) | Memory (B/op) | Allocs/op |" >> benchmark-report.md

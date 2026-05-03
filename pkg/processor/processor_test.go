@@ -857,6 +857,11 @@ func TestResolveIncludePattern(t *testing.T) {
 			pattern: "../shared/rules.yml",
 			want:    filepath.Clean(filepath.Join(baseDir, "../shared/rules.yml")),
 		},
+		{
+			name:    "absolute path",
+			pattern: filepath.Clean(filepath.Join(string(os.PathSeparator), "etc", "rules.yml")),
+			want:    filepath.Clean(filepath.Join(string(os.PathSeparator), "etc", "rules.yml")),
+		},
 	}
 
 	for _, tt := range tests {
@@ -1408,15 +1413,13 @@ func TestProcessNodeWithBuffer(t *testing.T) {
 }
 
 func TestParallelProcessing(t *testing.T) {
-	// Create temporary directory for test files
-	tempDir, err := os.MkdirTemp("", "test-parallel")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Parallel()
 
-	// Use a strong password that meets security requirements
-	strongPassword := "S9f&h27!Gp*3K5^LmZ#qR8@tUvWxYz"
+	// Use t.TempDir() for automatic cleanup (Go 1.15+)
+	tempDir := t.TempDir()
+
+	// Extract test password as constant to avoid magic string
+	const strongPassword = "S9f&h27!Gp*3K5^LmZ#qR8@tUvWxYz"
 
 	// Define number of workers
 	workers := 5
@@ -1537,12 +1540,10 @@ func TestProcessFileWithRules(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a temporary directory for test files
-			tempDir, err := os.MkdirTemp("", "test_config")
-			if err != nil {
-				t.Fatalf("Failed to create temp dir: %v", err)
-			}
-			defer func() { _ = os.RemoveAll(tempDir) }()
+			t.Parallel()
+
+			// Use t.TempDir() for automatic cleanup (Go 1.15+)
+			tempDir := t.TempDir()
 
 			// Create test files
 			yamlFile := filepath.Join(tempDir, "test.yaml")
@@ -1566,7 +1567,7 @@ func TestProcessFileWithRules(t *testing.T) {
 			}
 
 			// Process the file
-			err = ProcessFile(yamlFile, tt.key, tt.operation, false, configFile)
+			err := ProcessFile(yamlFile, tt.key, tt.operation, false, configFile)
 			if (err != nil) != tt.wantError {
 				t.Errorf("ProcessFile() error = %v, wantError %v", err, tt.wantError)
 			}

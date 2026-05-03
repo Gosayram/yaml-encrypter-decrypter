@@ -2,12 +2,9 @@
 .PHONY: fmt vet lint lint-fix install-lint install-staticcheck install-godoclint staticcheck godoclint check-all
 
 # Check formatting of Go code
-fmt: ## Format Go source files in cmd and pkg
+fmt: ## Format Go source files in the entire module
 	@echo "Checking code formatting..."
-	@echo "Formatting pkg directory..."
-	@go fmt -x ./pkg/...
-	@echo "Formatting cmd directory..."
-	@go fmt -x ./cmd/...
+	@go fmt -x ./...
 
 vet: ## Run go vet checks
 	@echo "Running go vet..."

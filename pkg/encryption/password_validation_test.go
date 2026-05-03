@@ -41,6 +41,11 @@ func TestValidatePasswordStrength(t *testing.T) {
 			wantErr:  true,
 		},
 		{
+			name:     "exact 15-char lowercase allowed",
+			password: strings.Repeat("a", 15),
+			wantErr:  false,
+		},
+		{
 			name:     "long passphrase without character diversity still allowed",
 			password: "correcthorsebatterystaple",
 			wantErr:  false,

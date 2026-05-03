@@ -160,6 +160,34 @@ func matchesPattern(path, pattern string, debug bool) bool {
 		return true
 	}
 
+	// Treat alternation patterns like "a|b|c" as regex alternatives.
+	if strings.Contains(pattern, "|") {
+		branches := strings.Split(pattern, "|")
+		processedBranches := make([]string, len(branches))
+		for i, branch := range branches {
+			// For each alternative, if it contains '*' convert it via wildcardToRegex,
+			// otherwise escape regex metacharacters so plain characters remain literal
+			if strings.Contains(branch, "*") {
+				processedBranches[i] = wildcardToRegex(branch)
+			} else {
+				processedBranches[i] = regexp.QuoteMeta(branch)
+			}
+		}
+		quotedPattern := "^(" + strings.Join(processedBranches, "|") + ")$"
+		re, err := getCompiledRegex(quotedPattern)
+		if err != nil {
+			debugLog(debug, "Error compiling alternation regex for pattern '%s': %v", pattern, err)
+			return false
+		}
+		matches := re.MatchString(path)
+		matchStatus := matchStatusNo
+		if matches {
+			matchStatus = matchStatusOK
+		}
+		debugLog(debug, "Path '%s' %s alternation pattern '%s'", path, matchStatus, pattern)
+		return matches
+	}
+
 	// Check if pattern is a wildcard pattern
 	if strings.Contains(pattern, "*") {
 		re, err := getCompiledRegex(wildcardToRegex(pattern))
@@ -173,22 +201,6 @@ func matchesPattern(path, pattern string, debug bool) bool {
 			matchStatus = matchStatusOK
 		}
 		debugLog(debug, "Path '%s' %s wildcard pattern '%s'", path, matchStatus, pattern)
-		return matches
-	}
-
-	// Treat alternation patterns like "a|b|c" as regex alternatives.
-	if strings.Contains(pattern, "|") {
-		re, err := getCompiledRegex("^(" + pattern + ")$")
-		if err != nil {
-			debugLog(debug, "Error compiling alternation regex for pattern '%s': %v", pattern, err)
-			return false
-		}
-		matches := re.MatchString(path)
-		matchStatus := matchStatusNo
-		if matches {
-			matchStatus = matchStatusOK
-		}
-		debugLog(debug, "Path '%s' %s alternation pattern '%s'", path, matchStatus, pattern)
 		return matches
 	}
 
@@ -281,9 +293,7 @@ func loadRulesFromPattern(pattern string, baseDir string, debug bool) ([]Rule, e
 			// Verify file exists and is valid
 			rules, err := loadRulesFromFile(specificFile, debug)
 			if err != nil {
-				// Log the error but continue with other files
-				debugLog(debug, "Error loading rules from '%s': %v", specificFile, err)
-				continue
+				return nil, fmt.Errorf("error loading rules from '%s': %w", specificFile, err)
 			}
 
 			allRules = append(allRules, rules...)
@@ -311,9 +321,7 @@ func loadRulesFromPattern(pattern string, baseDir string, debug bool) ([]Rule, e
 
 			rules, err := loadRulesFromFile(filePath, debug)
 			if err != nil {
-				// Log the error but continue with other files
-				debugLog(debug, "Error loading rules from '%s': %v", filePath, err)
-				continue
+				return nil, fmt.Errorf("error loading rules from '%s': %w", filePath, err)
 			}
 
 			allRules = append(allRules, rules...)

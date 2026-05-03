@@ -497,7 +497,7 @@ Override the encryption key with `YED_ENCRYPTION_KEY`:
 export YED_ENCRYPTION_KEY="my-super-p@s$w0rd123"
 ```
 **Password Requirements:**
-- **Minimum**: 16 characters
+- **Minimum**: 15 characters
 - **Maximum**: 64 characters (supports passphrases)
 - **Recommendation**: Use a mix of uppercase, lowercase, numbers, and special characters
 - **Avoid**: Common passwords will be rejected for security

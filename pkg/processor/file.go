@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -288,7 +289,7 @@ func renderScalarReplacement(originalNode, processedNode *yaml.Node, lines []str
 		trailingNewlines := countTrailingNewlines(value)
 
 		headerLine := lines[originalNode.Line-1]
-		contentIndent := strings.Repeat(" ", leadingSpaces(headerLine)+2)
+		contentIndent := strings.Repeat(" ", leadingSpaces(headerLine)+2+extractBlockScalarIndent(indicator))
 		lines := strings.Split(strings.TrimRight(value, "\n"), "\n")
 		if len(lines) == 1 && lines[0] == "" {
 			return indicator
@@ -345,6 +346,19 @@ func extractBlockScalarIndicator(node *yaml.Node, lines []string, fallback strin
 	return indicator
 }
 
+func extractBlockScalarIndent(indicator string) int {
+	if len(indicator) <= 1 {
+		return 0
+	}
+
+	numStr := indicator[1:]
+	indent, err := strconv.Atoi(numStr)
+	if err != nil {
+		return 0
+	}
+	return indent
+}
+
 func countTrailingNewlines(value string) int {
 	count := 0
 	for i := len(value) - 1; i >= 0; i-- {
@@ -380,7 +394,7 @@ func renderInlineScalar(value string, style yaml.Style) string {
 
 func escapeDoubleQuoted(value string) string {
 	replacer := strings.NewReplacer(
-		`\\`, `\\\\`,
+		`\`, `\\`,
 		`"`, `\"`,
 		"\n", `\n`,
 		"\t", `\t`,

@@ -432,11 +432,7 @@ func TestLoadRulesFromPattern_RangeAndNonYaml(t *testing.T) {
 	assert.Empty(t, res)
 
 	// Range syntax
-	dir, _ := os.MkdirTemp("", "rules_range")
-	defer func() {
-		err := os.RemoveAll(dir)
-		assert.NoError(t, err)
-	}()
+	dir := t.TempDir()
 
 	_ = os.WriteFile(filepath.Join(dir, "rule1.yml"), []byte("rules:\n  - block: b1"), 0644)
 	_ = os.WriteFile(filepath.Join(dir, "rule2.yml"), []byte("rules:\n  - block: b2"), 0644)

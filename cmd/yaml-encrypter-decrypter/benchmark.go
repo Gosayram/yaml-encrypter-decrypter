@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -258,8 +259,16 @@ func outputBenchmarkResults(results []benchmarkResult, outputFile string) error 
 		categories[r.Category] = append(categories[r.Category], r)
 	}
 
+	// Sort category keys for deterministic output
+	categoryKeys := make([]string, 0, len(categories))
+	for category := range categories {
+		categoryKeys = append(categoryKeys, category)
+	}
+	sort.Strings(categoryKeys)
+
 	// Output each category
-	for category, categoryResults := range categories {
+	for _, category := range categoryKeys {
+		categoryResults := categories[category]
 		fmt.Fprintf(&output, "## %s\n\n", category)
 		output.WriteString("| Algorithm | Operations/sec | Time (ns/op) | Memory (B/op) | Allocs/op |\n")
 		output.WriteString("|-----------|----------------|--------------|---------------|----------|\n")
