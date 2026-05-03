@@ -116,9 +116,9 @@ jobs:
             STATE="FAILED"
           fi
 
-          MSG="$ICON *CI Quality Gate*: $STATE%0ARepository: \`${{ github.repository }}\`%0ARef: \`${{ github.ref_name }}\`%0AActor: \`${{ github.actor }}\`%0ARun: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          MSG="🎉 <b>CI Quality Gate</b>: $STATE%0A%0A📋 <b>Information:</b>%0A• Repository: ${{ github.repository }}%0A• Ref: ${{ github.ref_name }}%0A• Actor: ${{ github.actor }}%0A• Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
           curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TELEGRAM_CHAT_ID}" \
-            -d parse_mode="Markdown" \
+            -d parse_mode="HTML" \
             -d text="${MSG}"
