@@ -115,16 +115,21 @@ jobs:
     name: Telegram Notify
     runs-on: ubuntu-latest
     needs: [trivy_scan, govulncheck, scorecard]
-    if: always() && secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != ''
+    if: always()
     steps:
       - name: Send telegram notification
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TG_RELEASER_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.YED_CHAT_ID }}
           TRIVY_RESULT: ${{ needs.trivy_scan.result }}
           GOVULN_RESULT: ${{ needs.govulncheck.result }}
           SCORECARD_RESULT: ${{ needs.scorecard.result }}
         run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "Telegram secrets not set, skipping notification"
+            exit 0
+          fi
+
           STATE="SUCCESS"
           ICON="✅"
           if [ "$TRIVY_RESULT" != "success" ] || [ "$GOVULN_RESULT" != "success" ] || [ "$SCORECARD_RESULT" != "success" ]; then

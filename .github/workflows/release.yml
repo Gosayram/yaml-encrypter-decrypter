@@ -100,5 +100,5 @@ jobs:
           # Repository name for Docker package URLs
           REPO_NAME: ${{ env.REPO_NAME }}
           # Telegram announcement
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_TOKEN: ${{ secrets.TG_RELEASER_TOKEN }}
           YED_CHAT_ID: ${{ secrets.YED_CHAT_ID }}

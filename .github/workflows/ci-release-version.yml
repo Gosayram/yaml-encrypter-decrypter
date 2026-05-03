@@ -75,7 +75,7 @@ jobs:
     name: Telegram Notify
     runs-on: ubuntu-latest
     needs: [update_release_version]
-    if: always() && secrets.TG_RELEASER_TOKEN && secrets.YED_CHAT_ID
+    if: always()
     steps:
       - name: Send telegram notification
         env:
@@ -83,6 +83,11 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.YED_CHAT_ID }}
           JOB_RESULT: ${{ needs.update_release_version.result }}
         run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "Telegram secrets not set, skipping notification"
+            exit 0
+          fi
+
           if [ "$JOB_RESULT" = "success" ]; then
             ICON="✅"
             STATE="SUCCESS"
