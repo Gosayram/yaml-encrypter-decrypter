@@ -816,36 +816,6 @@ func verifyEncryption(node *yaml.Node, fieldPath, key string) error {
 	return nil
 }
 
-// verifyDecryption checks if a field is properly decrypted
-func verifyDecryption(node *yaml.Node, fieldName, key string) error {
-	if node.Kind != yaml.DocumentNode || len(node.Content) == 0 {
-		return fmt.Errorf("invalid YAML document structure")
-	}
-
-	root := node.Content[0]
-	if root.Kind != yaml.MappingNode {
-		return fmt.Errorf("root node is not a mapping")
-	}
-
-	for i := 0; i < len(root.Content); i += 2 {
-		if i+1 >= len(root.Content) {
-			continue
-		}
-
-		keyNode := root.Content[i]
-		valueNode := root.Content[i+1]
-
-		if keyNode.Value == fieldName {
-			if strings.HasPrefix(valueNode.Value, AES) {
-				return fmt.Errorf("field %s is still encrypted", fieldName)
-			}
-			return nil
-		}
-	}
-
-	return fmt.Errorf("field %s not found", fieldName)
-}
-
 // TestFileProcessorEmptyConfig tests loading rules with an empty config file
 func TestFileProcessorEmptyConfig(t *testing.T) {
 	// Create a temporary empty config file
