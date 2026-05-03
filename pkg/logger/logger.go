@@ -68,6 +68,9 @@ func Initialize(cfg Config) error {
 		return err
 	}
 
+	// Add stack traces for error-level logs for better debugging
+	logger = logger.WithOptions(zap.AddStacktrace(zapcore.ErrorLevel))
+
 	// Add sampling for high-frequency logs if enabled
 	if cfg.SamplingEnabled {
 		logger = loggerWithOptions(logger, zap.WrapCore(func(core zapcore.Core) zapcore.Core {

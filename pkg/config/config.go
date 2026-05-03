@@ -149,3 +149,12 @@ func Load() (*Config, error) {
 
 	return cfg, nil
 }
+
+// AllSettings returns all settings for debugging purposes
+func AllSettings() map[string]interface{} {
+	v := viper.GetViper()
+	if v == nil {
+		return nil
+	}
+	return v.AllSettings()
+}
