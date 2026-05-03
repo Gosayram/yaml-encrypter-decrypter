@@ -1397,6 +1397,7 @@ service:
 		t.Fatalf("inline comment was lost after encryption")
 	}
 
+	// Decrypt and verify formatting is preserved
 	if err := ProcessFile(yamlFile, key, OperationDecrypt, false, configFile); err != nil {
 		t.Fatalf("decrypt ProcessFile failed: %v", err)
 	}
@@ -1405,8 +1406,7 @@ service:
 	if err != nil {
 		t.Fatalf("Failed to read decrypted file: %v", err)
 	}
-
 	if !bytes.Equal(decryptedContent, original) {
-		t.Fatalf("format/content mismatch after encrypt+decrypt\nExpected:\n%s\nGot:\n%s", string(original), string(decryptedContent))
+		t.Fatalf("Decrypted content does not match original")
 	}
 }
