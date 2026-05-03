@@ -1,6 +1,6 @@
 # YAML Encrypter-Decrypter (`yed`)
 
-![Go version](https://img.shields.io/github/go-mod/go-version/atlet99/yaml-encrypter-decrypter/main?style=flat&label=go-version) [![Docker Image Version](https://img.shields.io/docker/v/zetfolder17/yaml-encrypter-decrypter?label=docker%20image&sort=semver)](https://hub.docker.com/r/zetfolder17/yaml-encrypter-decrypter) ![Docker Image Size](https://img.shields.io/docker/image-size/zetfolder17/yaml-encrypter-decrypter/latest) [![CI](https://github.com/atlet99/yaml-encrypter-decrypter/actions/workflows/ci.yml/badge.svg)](https://github.com/atlet99/yaml-encrypter-decrypter/actions/workflows/ci.yml) [![GitHub contributors](https://img.shields.io/github/contributors/atlet99/yaml-encrypter-decrypter)](https://github.com/atlet99/yaml-encrypter-decrypter/graphs/contributors/) [![Go Report Card](https://goreportcard.com/badge/github.com/atlet99/yaml-encrypter-decrypter)](https://goreportcard.com/report/github.com/atlet99/yaml-encrypter-decrypter) [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/atlet99/yaml-encrypter-decrypter/badge)](https://securityscorecards.dev/viewer/?uri=github.com/atlet99/yaml-encrypter-decrypter) ![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/atlet99/yaml-encrypter-decrypter?sort=semver)
+![Версия Go](https://img.shields.io/github/go-mod/go-version/Gosayram/yaml-encrypter-decrypter/main?style=flat&label=go-version) [![Версия Docker образа](https://img.shields.io/docker/v/zetfolder17/yaml-encrypter-decrypter?label=docker%20image&sort=semver)](https://hub.docker.com/r/zetfolder17/yaml-encrypter-decrypter) ![Размер Docker образа](https://img.shields.io/docker/image-size/zetfolder17/yaml-encrypter-decrypter/latest) [![CI](https://github.com/Gosayram/yaml-encrypter-decrypter/actions/workflows/ci.yml/badge.svg)](https://github.com/Gosayram/yaml-encrypter-decrypter/actions/workflows/ci.yml) [![Контрибьюторы GitHub](https://img.shields.io/github/contributors/Gosayram/yaml-encrypter-decrypter)](https://github.com/Gosayram/yaml-encrypter-decrypter/graphs/contributors/) [![Go Report Card](https://goreportcard.com/badge/github.com/Gosayram/yaml-encrypter-decrypter)](https://goreportcard.com/report/github.com/Gosayram/yaml-encrypter-decrypter) [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/Gosayram/yaml-encrypter-decrypter/badge)](https://securityscorecards.dev/viewer/?uri=github.com/Gosayram/yaml-encrypter-decrypter) ![Релиз GitHub (последняя версия SemVer)](https://img.shields.io/github/v/release/Gosayram/yaml-encrypter-decrypter?sort=semver) [![Лицензия: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/Gosayram/yaml-encrypter-decrypter/blob/main/LICENSE) [![CodeQL](https://github.com/Gosayram/yaml-encrypter-decrypter/actions/workflows/codeql.yml/badge.svg)](https://github.com/Gosayram/yaml-encrypter-decrypter/actions/workflows/codeql.yml)*
 
 *CLI-инструмент на Go для шифрования и дешифрования конфиденциальных данных в YAML файлах. Использует современные алгоритмы шифрования и надежную систему конфигурации для обеспечения безопасной обработки данных.*
 
@@ -158,13 +158,13 @@ make benchmark-report
 ## **Начало работы**
 
 ### **Требования**
-- Установлен Go 1.24.1+.
+- Установлен Go 1.25.8.
 - Установлен Make в системе.
 
 ### **Шаги**
 1. Клонируйте репозиторий:
 ```bash
-git clone https://github.com/atlet99/yaml-encrypter-decrypter.git;
+git clone https://github.com/Gosayram/yaml-encrypter-decrypter.git;
 cd yaml-encryptor-decryptor
 ```
 
@@ -257,7 +257,7 @@ axel:
 export YED_ENCRYPTION_KEY="my-super-secure-key"
 ```
 **Требования к паролю:**
-- **Минимум**: 8 символов
+- **Минимум**: 15 символов
 - **Максимум**: 64 символа (поддерживает парольные фразы)
 - **Рекомендация**: Используйте сочетание прописных, строчных букв, цифр и специальных символов
 - **Избегайте**: Общеизвестные пароли будут отклонены в целях безопасности
@@ -266,14 +266,37 @@ export YED_ENCRYPTION_KEY="my-super-secure-key"
 
 *Инструмент предоставляет различные опции для шифрования и дешифрования данных:*
 
-**Шифрование одного значения**
-```bash
-./bin/yed --operation encrypt --value="MySecretData" --key="my-super-secure-key"
+**Доступные опции:**
 ```
+  Обязательно для шифрования/дешифрования:
+    -file, -f string      Путь к YAML файлу
+    -key, -k string       Ключ шифрования/дешифрования
+    -operation, -o string Операция для выполнения (encrypt/decrypt)
 
-**Дешифрование одного значения**
-```bash
-./bin/yed --operation decrypt --value="AES256:...encrypted_value..." --key="my-super-secure-key"
+  Управление операциями:
+    -dry-run, -d          Вывести результат без изменения файла
+    -diff, -D             Показать различия между исходными и зашифрованными значениями
+
+  Логирование и информация:
+    -debug, -v            Включить отладочное логирование
+    -version, -V          Показать информацию о версии
+
+  Расширенная конфигурация:
+    -algorithm, -a string Алгоритм формирования ключа (argon2id, pbkdf2-sha256, pbkdf2-sha512)
+
+  Анализ производительности:
+    -benchmark, -b        Запустить бенчмарки производительности
+    -bench-file, -B string Путь для сохранения результатов бенчмарка (по умолчанию: stdout)
+
+  Конфигурация:
+    -config, -c string    Путь к файлу .yed_config.yml (по умолчанию: .yed_config.yml)
+    -validate, -C         Проверить конфигурацию и правила без выполнения шифрования/дешифрования
+    -include-rules, -i    Разделенный запятыми список дополнительных файлов правил для включения
+
+  Логирование:
+    -log-level, -l string Уровень логирования (debug, info, warn, error)
+    -log-format, -F string Формат логирования (console, json)
+    -log-output, -O string Вывод логов (stdout, stderr, или путь к файлу)
 ```
 
 ### **Обработка YAML файла**
@@ -494,4 +517,4 @@ Dry-run mode: The following changes would be applied:
 
 ### **Лицензия**
 
-Это проект с открытым исходным кодом под лицензией [MIT](https://github.com/atlet99/yaml-encrypter-decrypter/blob/main/LICENSE).
+Это проект с открытым исходным кодом под лицензией [MIT](https://github.com/Gosayram/yaml-encrypter-decrypter/blob/main/LICENSE).

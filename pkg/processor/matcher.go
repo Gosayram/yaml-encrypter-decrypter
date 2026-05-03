@@ -235,7 +235,7 @@ func processRules(path string, rules []Rule, debug bool) (string, bool) {
 
 	// Backward-compatible mode: if no rules provided, process all scalar paths.
 	if len(rules) == 0 {
-		debugLog(debug, "No rules configured, processing path by default: %s", path)
+		debugLog(debug, "WARNING: No rules configured, falling back to default-all: encrypting all scalar paths for: %s", path)
 		return "default-all", true
 	}
 

@@ -2,7 +2,7 @@
 
 # YAML Encrypter-Decrypter (`yed`)
 
-![Go version](https://img.shields.io/github/go-mod/go-version/atlet99/yaml-encrypter-decrypter/main?style=flat&label=go-version) [![Docker Image Version](https://img.shields.io/docker/v/zetfolder17/yaml-encrypter-decrypter?label=docker%20image&sort=semver)](https://hub.docker.com/r/zetfolder17/yaml-encrypter-decrypter) ![Docker Image Size](https://img.shields.io/docker/image-size/zetfolder17/yaml-encrypter-decrypter/latest) [![CI](https://github.com/atlet99/yaml-encrypter-decrypter/actions/workflows/ci.yml/badge.svg)](https://github.com/atlet99/yaml-encrypter-decrypter/actions/workflows/ci.yml) [![GitHub contributors](https://img.shields.io/github/contributors/atlet99/yaml-encrypter-decrypter)](https://github.com/atlet99/yaml-encrypter-decrypter/graphs/contributors/) [![Go Report Card](https://goreportcard.com/badge/github.com/atlet99/yaml-encrypter-decrypter)](https://goreportcard.com/report/github.com/atlet99/yaml-encrypter-decrypter) [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/atlet99/yaml-encrypter-decrypter/badge)](https://securityscorecards.dev/viewer/?uri=github.com/atlet99/yaml-encrypter-decrypter) ![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/atlet99/yaml-encrypter-decrypter?sort=semver) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/atlet99/yaml-encrypter-decrypter/blob/main/LICENSE) [![CodeQL](https://github.com/atlet99/yaml-encrypter-decrypter/actions/workflows/codeql.yml/badge.svg)](https://github.com/atlet99/yaml-encrypter-decrypter/actions/workflows/codeql.yml)
+![Go version](https://img.shields.io/github/go-mod/go-version/Gosayram/yaml-encrypter-decrypter/main?style=flat&label=go-version) [![Docker Image Version](https://img.shields.io/docker/v/zetfolder17/yaml-encrypter-decrypter?label=docker%20image&sort=semver)](https://hub.docker.com/r/zetfolder17/yaml-encrypter-decrypter) ![Docker Image Size](https://img.shields.io/docker/image-size/zetfolder17/yaml-encrypter-decrypter/latest) [![CI](https://github.com/Gosayram/yaml-encrypter-decrypter/actions/workflows/ci.yml/badge.svg)](https://github.com/Gosayram/yaml-encrypter-decrypter/actions/workflows/ci.yml) [![GitHub contributors](https://img.shields.io/github/contributors/Gosayram/yaml-encrypter-decrypter)](https://github.com/Gosayram/yaml-encrypter-decrypter/graphs/contributors/) [![Go Report Card](https://goreportcard.com/badge/github.com/Gosayram/yaml-encrypter-decrypter)](https://goreportcard.com/report/github.com/Gosayram/yaml-encrypter-decrypter) [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/Gosayram/yaml-encrypter-decrypter/badge)](https://securityscorecards.dev/viewer/?uri=github.com/Gosayram/yaml-encrypter-decrypter) ![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/Gosayram/yaml-encrypter-decrypter?sort=semver) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/Gosayram/yaml-encrypter-decrypter/blob/main/LICENSE) [![CodeQL](https://github.com/Gosayram/yaml-encrypter-decrypter/actions/workflows/codeql.yml/badge.svg)](https://github.com/Gosayram/yaml-encrypter-decrypter/actions/workflows/codeql.yml)
 
 
 *A Go-based CLI tool for encrypting and decrypting sensitive data in YAML files. It uses modern encryption algorithms and a robust configuration system to ensure your data is securely handled.*
@@ -393,13 +393,13 @@ This helps in troubleshooting and understanding the encryption process without c
 ## **Getting Started**
 
 ### **Requirements**
-- Go 1.24.1+ installed.
+- Go 1.25.8 installed.
 - Make installed on your system.
 
 ### **Steps**
 1. Clone the repository:
 ```bash
-git clone https://github.com/atlet99/yaml-encrypter-decrypter.git;
+git clone https://github.com/Gosayram/yaml-encrypter-decrypter.git;
 cd yaml-encryptor-decryptor
 ```
 
@@ -523,21 +523,20 @@ export YED_ENCRYPTION_KEY="my-super-p@s$w0rd123"
 
   Advanced configuration:
     -algorithm, -a string Key derivation algorithm (argon2id, pbkdf2-sha256, pbkdf2-sha512)
-    -config, -c string    Path to the .yed_config.yml file (default: .yed_config.yml)
 
   Performance analysis:
     -benchmark, -b        Run performance benchmarks
     -bench-file, -B string Path to save benchmark results (default: stdout)
-```
 
-**Encrypt a Single Value**
-```bash
-./bin/yed --operation encrypt --value="MySecretData" --key="my-super-secure-key"
-```
+  Configuration:
+    -config, -c string    Path to the .yed_config.yml file (default: .yed_config.yml)
+    -validate, -C         Validate configuration and rules without performing encryption/decryption
+    -include-rules, -i    Comma-separated list of additional rule files to include
 
-**Decrypt a Single Value**
-```bash
-./bin/yed --operation decrypt --value="AES256:...encrypted_value..." --key="my-super-secure-key"
+  Logging:
+    -log-level, -l string Log level (debug, info, warn, error)
+    -log-format, -F string Log format (console, json)
+    -log-output, -O string Log output (stdout, stderr, or file path)
 ```
 
 ### **Process a YAML File**
@@ -849,7 +848,7 @@ Dry-run mode: The following changes would be applied:
 
 ### **License**
 
-This is an open source project under the [MIT](https://github.com/atlet99/yaml-encrypter-decrypter/blob/main/LICENSE) license.
+This is an open source project under the [MIT](https://github.com/Gosayram/yaml-encrypter-decrypter/blob/main/LICENSE) license.
 
 ### **Environment Variables**
 

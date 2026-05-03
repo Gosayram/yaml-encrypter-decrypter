@@ -15,7 +15,7 @@ reviews:
     - "!test_results/**"
     - "!yed-assets/**"
     - "!.git/**"
-    - "!*.bak"
+    - "!**/*.bak"
 
   path_instructions:
     - path: "**/*.go"
@@ -30,7 +30,7 @@ reviews:
       instructions: >
         Check pinned action versions (SHA preferred), least-privilege permissions,
         safe secret usage, and cache correctness.
-    - path: "Dockerfile*"
+    - path: "**/Dockerfile*"
       instructions: >
         Ensure minimal base image, no secret leakage via ARG/ENV, and safe copy/install steps.
     - path: "**/*.tf"
