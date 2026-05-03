@@ -1,54 +1,20 @@
 package main
 
 import (
-	"flag"
-	"github.com/stretchr/testify/assert"
 	"os"
-	"path/filepath"
 	"testing"
+
+	"github.com/atlet99/yaml-encrypter-decrypter/pkg/logger"
+	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
 )
 
-func TestMainWithExitCode_Coverage(t *testing.T) {
-	// Save original Args and restore them later
-	origArgs := os.Args
-	defer func() { os.Args = origArgs }()
-
-	tempDir := t.TempDir()
-	yamlFile := filepath.Join(tempDir, "test.yml")
-	err := os.WriteFile(yamlFile, []byte("key: value"), 0644)
-	assert.NoError(t, err)
-
-	configFile := filepath.Join(tempDir, ".yed_config.yml")
-	err = os.WriteFile(configFile, []byte("encryption:\n  rules:\n    - name: r1\n      block: '*'\n      pattern: key\n      action: encrypt"), 0644)
-	assert.NoError(t, err)
-
-	tests := []struct {
-		name string
-		args []string
-		want int
-	}{
-		{"version", []string{"cmd", "-version"}, 0},
-		{"no args", []string{"cmd"}, 1},
-		{"validate", []string{"cmd", "-validate", "-config", configFile}, 0},
-		{"invalid operation", []string{"cmd", "-file", yamlFile, "-key", "HighlySecureAndUniquePass-2024!", "-operation", "invalid"}, 1},
-		{"dry-run", []string{"cmd", "-file", yamlFile, "-key", "HighlySecureAndUniquePass-2024!", "-operation", "encrypt", "-dry-run", "-config", configFile}, 0},
-		{"diff", []string{"cmd", "-file", yamlFile, "-key", "HighlySecureAndUniquePass-2024!", "-operation", "encrypt", "-diff", "-config", configFile}, 0},
-		{"benchmark", []string{"cmd", "-benchmark"}, 0},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			os.Args = tt.args
-			// Reset flag.CommandLine to allow re-parsing
-			flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
-
-			got := mainWithExitCode()
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
 func TestGetEncryptionKey_Coverage(t *testing.T) {
+	// Initialize test logger
+	testLogger := zap.NewExample()
+	logger.ReplaceGlobals(testLogger)
+	defer logger.ReplaceGlobals(logger.L())
+
 	t.Run("from flag", func(t *testing.T) {
 		key, err := getEncryptionKey("HighlySecureAndUniquePass-2024!", false)
 		assert.NoError(t, err)

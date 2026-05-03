@@ -1,16 +1,17 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/atlet99/yaml-encrypter-decrypter/pkg/config"
 	"github.com/atlet99/yaml-encrypter-decrypter/pkg/encryption"
 	"github.com/atlet99/yaml-encrypter-decrypter/pkg/logger"
 	"github.com/atlet99/yaml-encrypter-decrypter/pkg/processor"
 	"github.com/awnumar/memguard"
+	"github.com/spf13/pflag"
 	"go.uber.org/zap"
 )
 
@@ -54,7 +55,10 @@ func main() {
 	// Safe termination when receiving interrupt signal
 	memguard.CatchInterrupt()
 
-	// Run main code and exit with returned code
+	// Initialize flags
+	initFlags()
+
+	// Run the main application logic
 	code := mainWithExitCode()
 
 	// Clean up at the end of execution
@@ -65,20 +69,23 @@ func main() {
 }
 
 func mainWithExitCode() int {
-	// Parse command line arguments
-	flags, err := parseFlags()
+	// Parse command line arguments using pflag
+	pflag.Parse()
+
+	// Load configuration from flags, environment variables, and config file
+	cfg, err := config.Load()
 	if err != nil {
-		logger.L().Error("Failed to parse flags", zap.Error(err))
-		flag.Usage()
+		fmt.Fprintf(os.Stderr, "Failed to load configuration: %v\n", err)
+		pflag.Usage()
 		return 1
 	}
 
 	// Initialize logger with configuration
 	logCfg := logger.Config{
-		Level:       flags.logLevel,
-		Development: flags.debug,
-		Encoding:    flags.logFormat,
-		OutputPath:  flags.logOutput,
+		Level:       cfg.LogLevel,
+		Development: cfg.Debug,
+		Encoding:    cfg.LogFormat,
+		OutputPath:  cfg.LogOutput,
 	}
 	if err := logger.Initialize(logCfg); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
@@ -90,78 +97,49 @@ func mainWithExitCode() int {
 
 	logger.L().Info("Application starting",
 		zap.String("version", Version),
-		zap.Bool("debug", flags.debug),
-		zap.String("log_level", flags.logLevel),
-		zap.String("log_format", flags.logFormat),
+		zap.Bool("debug", cfg.Debug),
+		zap.String("log_level", cfg.LogLevel),
+		zap.String("log_format", cfg.LogFormat),
 	)
 
 	// Show version if requested
-	if flags.showVersion {
+	if cfg.ShowVersion {
 		displayVersion()
 		return 0
 	}
 
 	// Run benchmarks if requested
-	if flags.benchmark {
-		// If no benchmark file is specified, use console output
-		benchFile := flags.benchFile
-		return runBenchmarks(benchFile)
+	if cfg.Benchmark {
+		return runBenchmarks(cfg.BenchFile)
 	}
-
-	// Determine the config path
-	configFilePath := ".yed_config.yml"
-	if flags.configPath != "" {
-		configFilePath = flags.configPath
-		if flags.debug {
-			logger.L().Debug("Using custom config path", zap.String("path", configFilePath))
-		}
-	}
-
-	// Convert relative path to absolute path
-	if !filepath.IsAbs(configFilePath) {
-		absPath, err := filepath.Abs(configFilePath)
-		if err == nil {
-			configFilePath = absPath
-			if flags.debug {
-				logger.L().Debug("Using absolute config path", zap.String("path", configFilePath))
-			}
-		} else {
-			logger.L().Warn("Could not convert to absolute path",
-				zap.String("path", configFilePath),
-				zap.Error(err))
-		}
-	}
-
-	// Update flags.configPath with the resolved path
-	flags.configPath = configFilePath
 
 	// If validate option is specified, validate the configuration and exit
-	if flags.validateRules {
-		return validateConfiguration(configFilePath, flags.debug, flags.includeRules)
+	if cfg.ValidateRules {
+		return validateConfiguration(cfg.ConfigPath, cfg.Debug, cfg.IncludeRules)
 	}
 
 	// Get encryption key (from flag or environment)
-	key, err := getEncryptionKey(flags.key, flags.debug)
+	key, err := getEncryptionKey(cfg.Key, cfg.Debug)
 	if err != nil {
 		logger.L().Error("Failed to get encryption key", zap.Error(err))
-		flag.Usage()
+		pflag.Usage()
 		return 1
 	}
 
 	// Validate required flags
-	if flags.filename == "" || key == "" || flags.operation == "" {
+	if cfg.Filename == "" || key == "" || cfg.Operation == "" {
 		logger.L().Error("Missing required arguments",
-			zap.String("filename", flags.filename),
+			zap.String("filename", cfg.Filename),
 			zap.Bool("has_key", key != ""),
-			zap.String("operation", flags.operation))
-		flag.Usage()
+			zap.String("operation", cfg.Operation))
+		pflag.Usage()
 		return 1
 	}
 
 	// Validate and set algorithm flag if provided
-	keyDerivation, err := encryption.ValidateAlgorithm(flags.algorithm)
+	keyDerivation, err := encryption.ValidateAlgorithm(cfg.Algorithm)
 	if err != nil {
-		logger.L().Error("Invalid algorithm", zap.String("algorithm", flags.algorithm), zap.Error(err))
+		logger.L().Error("Invalid algorithm", zap.String("algorithm", cfg.Algorithm), zap.Error(err))
 		return 1
 	}
 
@@ -170,60 +148,65 @@ func mainWithExitCode() int {
 	defer keyBuffer.Destroy()
 
 	// Load rules from config file
-	rules, _, err := processor.LoadRules(configFilePath, flags.debug)
+	rules, _, err := processor.LoadRules(cfg.ConfigPath, cfg.Debug)
 	if err != nil {
-		logger.L().Error("Failed to load rules", zap.String("config", configFilePath), zap.Error(err))
+		logger.L().Error("Failed to load rules", zap.String("config", cfg.ConfigPath), zap.Error(err))
 		return 1
 	}
 
 	// Process additional rule files if specified
-	if flags.includeRules != "" {
-		// Parse comma-separated list of rule files.
-		additionalRules, err := parseRequiredIncludeRulePatterns(flags.includeRules)
+	if cfg.IncludeRules != "" {
+		additionalRules, err := parseRequiredIncludeRulePatterns(cfg.IncludeRules)
 		if err != nil {
-			logger.L().Error("Invalid include rules pattern", zap.String("pattern", flags.includeRules), zap.Error(err))
+			logger.L().Error("Invalid include rules pattern", zap.String("pattern", cfg.IncludeRules), zap.Error(err))
 			return 1
 		}
 
-		// Create a temporary YAML file with the include_rules section
 		tempConfig := processor.Config{}
 		tempConfig.Encryption.IncludeRules = additionalRules
 		validateRules := true
 		tempConfig.Encryption.ValidateRules = &validateRules
 
-		// Try to load the additional rule files
-		additionalRulesLoaded, _, err := processor.LoadAdditionalRules(&tempConfig, filepath.Dir(configFilePath), flags.debug)
+		additionalRulesLoaded, _, err := processor.LoadAdditionalRules(&tempConfig, filepath.Dir(cfg.ConfigPath), cfg.Debug)
 		if err != nil {
 			logger.L().Error("Failed to load additional rules", zap.Error(err))
 			return 1
 		}
 
-		// Validate combined rules before adding them
 		allRules := make([]processor.Rule, len(rules))
 		copy(allRules, rules)
 		allRules = append(allRules, additionalRulesLoaded...)
-		if err := processor.ValidateRules(allRules, flags.debug); err != nil {
+		if err := processor.ValidateRules(allRules, cfg.Debug); err != nil {
 			logger.L().Error("Failed to validate combined rules", zap.Error(err))
 			return 1
 		}
 
-		// Add additional rules to the existing rules
 		rules = append(rules, additionalRulesLoaded...)
 
-		if flags.debug {
+		if cfg.Debug {
 			logger.L().Debug("Added additional rules from command line",
 				zap.Int("count", len(additionalRulesLoaded)),
 				zap.Strings("patterns", additionalRules))
 		}
 	}
 
-	// Set the encryption algorithm if specified
 	if keyDerivation != "" {
 		encryption.SetDefaultAlgorithm(keyDerivation)
 		logger.L().Info("Key derivation algorithm set", zap.String("algorithm", string(keyDerivation)))
 	}
 
-	// Process file and handle interruption
+	// Convert config to appFlags for compatibility
+	flags := appFlags{
+		filename:   cfg.Filename,
+		key:        key,
+		operation:  cfg.Operation,
+		dryRun:     cfg.DryRun,
+		diff:       cfg.Diff,
+		debug:      cfg.Debug,
+		algorithm:  cfg.Algorithm,
+		configPath: cfg.ConfigPath,
+	}
+
 	return processFileWithInterruptHandling(flags, keyBuffer, rules)
 }
 

@@ -1,13 +1,12 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/atlet99/yaml-encrypter-decrypter/pkg/encryption"
-	"github.com/awnumar/memguard"
+	"github.com/spf13/pflag"
 )
 
 // CLI flags
@@ -31,63 +30,42 @@ type appFlags struct {
 	logOutput string
 }
 
-// parseFlags parses command line arguments and returns an appFlags struct
-func parseFlags() (appFlags, error) {
-	// Define flags with short and long forms
-	var flags appFlags
+var appFlagsInstance = appFlags{}
 
+// initFlags initializes all command line flags
+func initFlags() {
 	// Required flags for main operation
-	flag.StringVar(&flags.filename, "file", "", "Path to the YAML file")
-	flag.StringVar(&flags.filename, "f", "", "")
-
-	flag.StringVar(&flags.key, "key", "", "Encryption/decryption key")
-	flag.StringVar(&flags.key, "k", "", "")
-
-	flag.StringVar(&flags.operation, "operation", "", "Operation to perform (encrypt/decrypt)")
-	flag.StringVar(&flags.operation, "o", "", "")
+	pflag.StringVarP(&appFlagsInstance.filename, "file", "f", "", "Path to the YAML file")
+	pflag.StringVarP(&appFlagsInstance.key, "key", "k", "", "Encryption/decryption key")
+	pflag.StringVarP(&appFlagsInstance.operation, "operation", "o", "", "Operation to perform (encrypt/decrypt)")
 
 	// Operation control flags
-	flag.BoolVar(&flags.dryRun, "dry-run", false, "Print the result without modifying the file")
-	flag.BoolVar(&flags.dryRun, "d", false, "")
-
-	flag.BoolVar(&flags.diff, "diff", false, "Show differences between original and encrypted values")
-	flag.BoolVar(&flags.diff, "D", false, "")
+	pflag.BoolVarP(&appFlagsInstance.dryRun, "dry-run", "d", false, "Print the result without modifying the file")
+	pflag.BoolVarP(&appFlagsInstance.diff, "diff", "D", false, "Show differences between original and encrypted values")
 
 	// Logging and information flags
-	flag.BoolVar(&flags.debug, "debug", false, "Enable debug logging")
-	flag.BoolVar(&flags.debug, "v", false, "")
-
-	flag.BoolVar(&flags.showVersion, "version", false, "Show version information")
-	flag.BoolVar(&flags.showVersion, "V", false, "")
+	pflag.BoolVarP(&appFlagsInstance.debug, "debug", "v", false, "Enable debug logging")
+	pflag.BoolVarP(&appFlagsInstance.showVersion, "version", "V", false, "Show version information")
 
 	// Advanced configuration flags
-	flag.StringVar(&flags.algorithm, "algorithm", "", "Key derivation algorithm to use (argon2id, pbkdf2-sha256, pbkdf2-sha512)")
-	flag.StringVar(&flags.algorithm, "a", "", "")
-
-	flag.StringVar(&flags.configPath, "config", "", "Path to the .yed_config.yml file (default: .yed_config.yml in current directory)")
-	flag.StringVar(&flags.configPath, "c", "", "")
-
-	flag.BoolVar(&flags.validateRules, "validate", false, "Validate configuration and rules without performing encryption/decryption")
-	flag.BoolVar(&flags.validateRules, "C", false, "")
+	pflag.StringVarP(&appFlagsInstance.algorithm, "algorithm", "a", "", "Key derivation algorithm to use (argon2id, pbkdf2-sha256, pbkdf2-sha512)")
+	pflag.StringVarP(&appFlagsInstance.configPath, "config", "c", "", "Path to the .yed_config.yml file (default: .yed_config.yml in current directory)")
+	pflag.BoolVarP(&appFlagsInstance.validateRules, "validate", "C", false, "Validate configuration and rules without performing encryption/decryption")
 
 	// Performance analysis flags
-	flag.BoolVar(&flags.benchmark, "benchmark", false, "Run performance benchmarks")
-	flag.BoolVar(&flags.benchmark, "b", false, "")
-
-	flag.StringVar(&flags.benchFile, "bench-file", "", "Path to save benchmark results (default: stdout)")
-	flag.StringVar(&flags.benchFile, "B", "", "")
+	pflag.BoolVarP(&appFlagsInstance.benchmark, "benchmark", "b", false, "Run performance benchmarks")
+	pflag.StringVarP(&appFlagsInstance.benchFile, "bench-file", "B", "", "Path to save benchmark results (default: stdout)")
 
 	// Additional rule files
-	flag.StringVar(&flags.includeRules, "include-rules", "", "Comma-separated list of additional rule files to include")
-	flag.StringVar(&flags.includeRules, "i", "", "")
+	pflag.StringVarP(&appFlagsInstance.includeRules, "include-rules", "i", "", "Comma-separated list of additional rule files to include")
 
 	// Logging configuration flags
-	flag.StringVar(&flags.logLevel, "log-level", "info", "Log level (debug, info, warn, error)")
-	flag.StringVar(&flags.logFormat, "log-format", "console", "Log format (console, json)")
-	flag.StringVar(&flags.logOutput, "log-output", "stderr", "Log output (stdout, stderr, or file path)")
+	pflag.StringVar(&appFlagsInstance.logLevel, "log-level", "info", "Log level (debug, info, warn, error)")
+	pflag.StringVar(&appFlagsInstance.logFormat, "log-format", "console", "Log format (console, json)")
+	pflag.StringVar(&appFlagsInstance.logOutput, "log-output", "stderr", "Log output (stdout, stderr, or file path)")
 
 	// Override default usage
-	flag.Usage = func() {
+	pflag.Usage = func() {
 		fmt.Fprintln(os.Stderr, "A tool for encrypting and decrypting YAML files while preserving formatting.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Usage:")
@@ -142,46 +120,24 @@ func parseFlags() (appFlags, error) {
 		fmt.Fprintln(os.Stderr, "  Show differences:   yed -f config.yml -k 'your-secure-key' -o encrypt -D")
 		fmt.Fprintln(os.Stderr, "")
 
-		fmt.Fprintln(os.Stderr, "For more information, visit: https://github.com/atlet99/yaml-encrypter-decrypter")
+		fmt.Fprintln(os.Stderr, "For more information, visit: https://github.com/Gosayram/yaml-encrypter-decrypter")
 	}
-
-	flag.Parse()
-
-	return flags, nil
 }
 
 // getEncryptionKey returns the encryption key from flag or environment variable
 func getEncryptionKey(flagKey string, debug bool) (string, error) {
-	// Create secure buffer for key
-	keyBuf := memguard.NewBuffer(0)
-	defer keyBuf.Destroy()
-
 	var key string
 
 	if flagKey != "" {
-		// Copy key to secure buffer
-		keyBuf = memguard.NewBufferFromBytes([]byte(flagKey))
-		if keyBuf == nil {
-			return "", fmt.Errorf("failed to create secure buffer for key")
-		}
-		key = string(keyBuf.Bytes())
+		key = flagKey
 	} else {
+		// Check environment variable
 		envKey := os.Getenv("YED_ENCRYPTION_KEY")
 		if envKey != "" {
-			if debug {
-				fmt.Println("[DEBUG] Using encryption key from YED_ENCRYPTION_KEY environment variable")
-			}
-			// Copy key from environment variable to secure buffer
-			keyBuf = memguard.NewBufferFromBytes([]byte(envKey))
-			if keyBuf == nil {
-				return "", fmt.Errorf("failed to create secure buffer for key")
-			}
-			key = string(keyBuf.Bytes())
+			key = envKey
+		} else {
+			return "", fmt.Errorf("error: encryption key not provided")
 		}
-	}
-
-	if key == "" {
-		return "", fmt.Errorf("error: encryption key not provided")
 	}
 
 	// Check key length
