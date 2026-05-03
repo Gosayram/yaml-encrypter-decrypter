@@ -3096,16 +3096,16 @@ func TestValidateRulesRejectsWhitespacePattern(t *testing.T) {
 }
 
 func TestIsSensitiveValueRespectsUnsecureDiffFlag(t *testing.T) {
-	unsecureDiffLog.Store(false)
+	globalDiffConfig.SetUnsecureDiff(false)
 	t.Cleanup(func() {
-		unsecureDiffLog.Store(false)
+		globalDiffConfig.SetUnsecureDiff(false)
 	})
 
 	if !isSensitiveValue("plain-secret-value") {
 		t.Fatalf("expected value to be sensitive when unsecureDiff is disabled")
 	}
 
-	unsecureDiffLog.Store(true)
+	globalDiffConfig.SetUnsecureDiff(true)
 	if isSensitiveValue("plain-secret-value") {
 		t.Fatalf("expected non-password value to be non-sensitive when unsecureDiff is enabled")
 	}

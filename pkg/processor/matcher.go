@@ -12,28 +12,35 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// regexCache stores compiled regular expressions
-var regexCache = struct {
+// ── RegexCache ─────────────────────────────────────────────────────────────────────
+
+// RegexCache stores compiled regular expressions with thread-safe access
+type RegexCache struct {
 	sync.RWMutex
 	cache map[string]*regexp.Regexp
-}{
-	cache: make(map[string]*regexp.Regexp),
 }
 
-// getCompiledRegex returns a compiled regex from cache or compiles a new one
-func getCompiledRegex(pattern string) (*regexp.Regexp, error) {
-	regexCache.RLock()
-	if re, ok := regexCache.cache[pattern]; ok {
-		regexCache.RUnlock()
+// NewRegexCache creates a new regex cache
+func NewRegexCache() *RegexCache {
+	return &RegexCache{
+		cache: make(map[string]*regexp.Regexp),
+	}
+}
+
+// Get returns a compiled regex from cache or compiles a new one
+func (c *RegexCache) Get(pattern string) (*regexp.Regexp, error) {
+	c.RLock()
+	if re, ok := c.cache[pattern]; ok {
+		c.RUnlock()
 		return re, nil
 	}
-	regexCache.RUnlock()
+	c.RUnlock()
 
-	regexCache.Lock()
-	defer regexCache.Unlock()
+	c.Lock()
+	defer c.Unlock()
 
 	// Double check after acquiring write lock
-	if re, ok := regexCache.cache[pattern]; ok {
+	if re, ok := c.cache[pattern]; ok {
 		return re, nil
 	}
 
@@ -42,16 +49,31 @@ func getCompiledRegex(pattern string) (*regexp.Regexp, error) {
 		return nil, err
 	}
 
-	regexCache.cache[pattern] = re
+	c.cache[pattern] = re
 	return re, nil
+}
+
+// Clear clears the regex cache
+func (c *RegexCache) Clear() {
+	c.Lock()
+	defer c.Unlock()
+	c.cache = make(map[string]*regexp.Regexp)
+}
+
+// Global regex cache instance for backward compatibility
+var globalRegexCache = NewRegexCache()
+
+// getCompiledRegex returns a compiled regex from cache or compiles a new one
+func getCompiledRegex(pattern string) (*regexp.Regexp, error) {
+	return globalRegexCache.Get(pattern)
 }
 
 // clearRegexCache clears the regex cache
 func clearRegexCache() {
-	regexCache.Lock()
-	defer regexCache.Unlock()
-	regexCache.cache = make(map[string]*regexp.Regexp)
+	globalRegexCache.Clear()
 }
+
+// ── Rule matching ─────────────────────────────────────────────────────────────
 
 // matchesRule checks if a path matches a rule
 func matchesRule(path string, rule Rule, debug bool) bool {

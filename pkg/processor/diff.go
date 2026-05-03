@@ -26,14 +26,6 @@ const (
 	sepWidth   = 60
 )
 
-// colourEnabled controls ANSI output. Disabled when writing to non-tty (file,
-// buffer in tests) or when NO_COLOR / TERM=dumb env vars are set.
-var colourEnabled atomic.Bool
-
-func init() {
-	colourEnabled.Store(isTerminal(os.Stdout) && os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb")
-}
-
 // isTerminal is a lightweight tty check that avoids importing golang.org/x/term.
 func isTerminal(f *os.File) bool {
 	fi, err := f.Stat()
@@ -44,7 +36,7 @@ func isTerminal(f *os.File) bool {
 }
 
 func colour(code, s string) string {
-	if !colourEnabled.Load() {
+	if !globalDiffConfig.colourEnabled.Load() {
 		return s
 	}
 	return code + s + ansiReset
@@ -57,34 +49,63 @@ func bold(s string) string   { return colour(ansiBold, s) }
 func yellow(s string) string { return colour(ansiYellow, s) }
 func dim(s string) string    { return colour(ansiDim, s) }
 
-// ── Output writer ──────────────────────────────────────────────────────────────
+// ── DiffConfig encapsulates diff output configuration ─────────────────────────────
 
-var diffOutput io.Writer
+// DiffConfig holds configuration for diff output formatting
+type DiffConfig struct {
+	colourEnabled atomic.Bool
+	output        io.Writer
+	unsecureDiff  atomic.Bool
+}
+
+// DefaultDiffConfig returns a diff config with sensible defaults
+func DefaultDiffConfig() *DiffConfig {
+	cfg := &DiffConfig{}
+	cfg.colourEnabled.Store(isTerminal(os.Stdout) && os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb")
+	if cfg.output == nil {
+		cfg.output = os.Stdout
+	}
+	return cfg
+}
+
+// SetOutput sets the output writer for diff output
+func (c *DiffConfig) SetOutput(w io.Writer) {
+	c.output = w
+	// Disable colour when output is not a real terminal.
+	if f, ok := w.(*os.File); ok {
+		c.colourEnabled.Store(isTerminal(f) && os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb")
+	} else {
+		c.colourEnabled.Store(false)
+	}
+}
+
+// SetUnsecureDiff sets the unsecure diff flag
+func (c *DiffConfig) SetUnsecureDiff(enabled bool) {
+	c.unsecureDiff.Store(enabled)
+}
+
+// GetOutput returns the current output writer
+func (c *DiffConfig) GetOutput() io.Writer {
+	if c.output == nil {
+		return os.Stdout
+	}
+	return c.output
+}
+
+// Global diff config instance for backward compatibility
+var globalDiffConfig = DefaultDiffConfig()
 
 // SetDiffOutput configures where diff output is written (tests use a buffer).
 // Colour is automatically disabled when w is not *os.File pointing to a tty.
+// This function updates the global diff config for backward compatibility.
 func SetDiffOutput(w io.Writer) {
-	diffOutput = w
-	// Disable colour when output is not a real terminal.
-	if f, ok := w.(*os.File); ok {
-		colourEnabled.Store(isTerminal(f) && os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb")
-	} else {
-		colourEnabled.Store(false)
-	}
+	globalDiffConfig.SetOutput(w)
 }
 
+// getDiffOutput returns the global diff output writer
 func getDiffOutput() io.Writer {
-	if diffOutput == nil {
-		return os.Stdout
-	}
-	return diffOutput
+	return globalDiffConfig.GetOutput()
 }
-
-// ── Secure flag ────────────────────────────────────────────────────────────────
-
-// unsecureDiffLog is shared with isSensitiveValue so it can consult the flag
-// without an extra parameter.
-var unsecureDiffLog atomic.Bool
 
 // ── diffStats tracks counters printed in the summary line ─────────────────────
 
@@ -102,7 +123,7 @@ func showDiff(data *yaml.Node, key, operation string, unsecureDiff bool, debug b
 		return
 	}
 
-	unsecureDiffLog.Store(unsecureDiff)
+	globalDiffConfig.SetUnsecureDiff(unsecureDiff)
 	debugLog(debug, "Starting showDiff with operation: %s, unsecureDiff: %v", operation, unsecureDiff)
 
 	if unsecureDiff {
@@ -292,7 +313,7 @@ func isSensitiveValue(value string) bool {
 	if strings.Contains(lowered, "password") || strings.Contains(lowered, "yed_encryption_key") {
 		return true
 	}
-	if unsecureDiffLog.Load() {
+	if globalDiffConfig.unsecureDiff.Load() {
 		return false
 	}
 	return !strings.HasPrefix(value, AES) && len(value) > MinEncryptedLength

@@ -2,8 +2,6 @@ package processor
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/atlet99/yaml-encrypter-decrypter/pkg/encryption"
@@ -88,103 +86,6 @@ func ProcessYAMLContentWithFoldedStyle(content []byte, key, operation string, ru
 	return processedContent, nil
 }
 
-// LoadRules loads encryption rules from a config file (exported version)
-func LoadRules(configFile string, debug bool) ([]Rule, *Config, error) {
-	return loadRules(configFile, debug)
-}
-
-// loadRules loads encryption rules from a config file
-func loadRules(configFile string, debug bool) ([]Rule, *Config, error) {
-	configFile = resolveConfigPath(configFile, debug)
-
-	debugLog(debug, "[loadRules] Config file is: '%s'", configFile)
-
-	config, err := readAndParseConfig(configFile, debug)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	allRules := config.Encryption.Rules
-
-	includedRules, err := processIncludedRules(config, configFile, debug)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	allRules = append(allRules, includedRules...)
-
-	if len(allRules) == 0 {
-		debugLog(debug, "Warning: no rules found in main config or included files")
-	} else {
-		debugLog(debug, "Loaded a total of %d rules", len(allRules))
-	}
-
-	config.Encryption.Rules = allRules
-
-	if err := validateRules(config, debug); err != nil {
-		return nil, nil, err
-	}
-
-	logUnsecureDiffSetting(config, debug)
-
-	config.UnsecureDiff = config.Encryption.UnsecureDiff
-
-	debugLog(debug, "Loaded %d rules in total", len(config.Encryption.Rules))
-	return config.Encryption.Rules, config, nil
-}
-
-// resolveConfigPath converts relative configFile to absolute if needed
-func resolveConfigPath(configFile string, debug bool) string {
-	if !filepath.IsAbs(configFile) {
-		cwd, err := os.Getwd()
-		if err == nil {
-			absPath := filepath.Join(cwd, configFile)
-			debugLog(debug, "Resolved relative config path '%s' to '%s'", configFile, absPath)
-			return absPath
-		}
-	}
-	return configFile
-}
-
-// readAndParseConfig reads and parses a YAML config file
-func readAndParseConfig(configFile string, debug bool) (*Config, error) {
-	content, err := os.ReadFile(configFile) // #nosec G304 - config file path is validated by caller
-	if err != nil {
-		return nil, fmt.Errorf("error reading config file: %w", err)
-	}
-
-	var config Config
-	if err := yaml.Unmarshal(content, &config); err != nil {
-		return nil, fmt.Errorf("error parsing config file: %w", err)
-	}
-
-	return &config, nil
-}
-
-// processIncludedRules loads rules from included rule files
-func processIncludedRules(config *Config, configFile string, debug bool) ([]Rule, error) {
-	if config == nil || len(config.Encryption.IncludeRules) == 0 {
-		return nil, nil
-	}
-	configDir := filepath.Dir(configFile)
-	return loadIncludedRules(config.Encryption.IncludeRules, configDir, debug, "included rules")
-}
-
-// validateRules validates the loaded rules
-func validateRules(config *Config, debug bool) error {
-	if config == nil || config.Encryption.ValidateRules == nil || *config.Encryption.ValidateRules {
-		return ValidateRules(config.Encryption.Rules, debug)
-	}
-	return nil
-}
-
-// logUnsecureDiffSetting logs a warning if unsecure_diff is enabled
-func logUnsecureDiffSetting(config *Config, debug bool) {
-	if config.Encryption.UnsecureDiff {
-		debugLog(debug, "WARNING: unsecure_diff is set to TRUE...")
-	}
-}
-
 // ProcessDiff processes YAML content and shows differences
 func ProcessDiff(content []byte, config Config) error {
 	debugLog(config.Debug, "Processing diff")
@@ -218,78 +119,6 @@ func ProcessDiff(content []byte, config Config) error {
 	releaseNodeTree(processedNode)
 
 	return nil
-}
-
-// ValidateRules validates rules for conflicts
-func ValidateRules(rules []Rule, debug bool) error {
-	for _, rule := range rules {
-		if strings.TrimSpace(rule.Block) == "" {
-			return fmt.Errorf("rule '%s' is missing block", rule.Name)
-		}
-		if strings.TrimSpace(rule.Pattern) == "" {
-			return fmt.Errorf("rule '%s' is missing pattern", rule.Name)
-		}
-		if !isValidRuleAction(rule.Action) {
-			return fmt.Errorf("rule '%s' has invalid action", rule.Name)
-		}
-	}
-
-	if duplicates := checkDuplicateRules(rules, debug); len(duplicates) > 0 {
-		return fmt.Errorf("rule conflict detected: %s", duplicates[0])
-	}
-
-	return nil
-}
-
-// checkDuplicateRules checks for duplicate rules based on name, and on block+pattern+action combination
-func checkDuplicateRules(rules []Rule, debug bool) []string {
-	var duplicates []string
-	ruleMap := make(map[string]map[string]map[string]int) // block -> pattern -> action -> line number
-	nameMap := make(map[string]int)                       // rule name -> line number
-
-	for i, rule := range rules {
-		action := normalizedRuleAction(rule.Action)
-		block := normalizedRuleBlock(rule.Block)
-		pattern := normalizedRulePattern(rule.Pattern)
-		nameKey := strings.TrimSpace(rule.Name)
-
-		// Check for duplicate rule names
-		if previousLine, exists := nameMap[nameKey]; exists {
-			// Calculate actual line numbers in YAML file
-			duplicateLine := i*linesPerRule + firstRuleOffset
-			originalLine := previousLine*linesPerRule + firstRuleOffset
-			msg := fmt.Sprintf("Duplicate rule name found: line %d: rule '%s' duplicates rule name at line %d",
-				duplicateLine, nameKey, originalLine)
-			duplicates = append(duplicates, msg)
-		} else {
-			nameMap[nameKey] = i
-		}
-
-		// Check for duplicate rule configurations (block + pattern + action)
-		if _, exists := ruleMap[block]; !exists {
-			ruleMap[block] = make(map[string]map[string]int)
-		}
-		if _, exists := ruleMap[block][pattern]; !exists {
-			ruleMap[block][pattern] = make(map[string]int)
-		}
-		if line, exists := ruleMap[block][pattern][action]; exists {
-			// Calculate actual line numbers in YAML file
-			duplicateLine := i*linesPerRule + firstRuleOffset
-			originalLine := line*linesPerRule + firstRuleOffset
-			msg := fmt.Sprintf("Duplicate rule configuration found: line %d: rule '%s' (block: '%s', pattern: '%s', action: '%s') duplicates rule at line %d",
-				duplicateLine, rule.Name, block, pattern, action, originalLine)
-			duplicates = append(duplicates, msg)
-		} else {
-			ruleMap[block][pattern][action] = i
-		}
-	}
-
-	return duplicates
-}
-
-// isRuleValidationEnabled returns true if rule validation is enabled
-func isRuleValidationEnabled(config *Config) bool {
-	return config == nil || config.Encryption.ValidateRules == nil || *config.Encryption.ValidateRules
 }
 
 // ProcessNode is a backward-compatible wrapper for processNode
@@ -353,28 +182,4 @@ func SetKeyDerivationAlgorithm(alg interface{}) error {
 
 	encryption.SetDefaultAlgorithm(normalizedAlg)
 	return nil
-}
-
-// LoadAdditionalRules loads rules from included rule files
-func LoadAdditionalRules(config *Config, configPath string, debug bool) ([]Rule, *Config, error) {
-	if config == nil {
-		return nil, nil, fmt.Errorf("config cannot be nil")
-	}
-
-	// In tests, configPath might be a directory, but in real usage it's a file path
-	// Let's use it as configDir if it's already a directory, or get its Dir
-	configDir := configPath
-	if fileInfo, err := os.Stat(configPath); err == nil && !fileInfo.IsDir() {
-		configDir = filepath.Dir(configPath)
-	} else if err != nil {
-		// If it doesn't exist, assume it was a file path
-		configDir = filepath.Dir(configPath)
-	}
-
-	includedRules, err := loadIncludedRules(config.Encryption.IncludeRules, configDir, debug, "additional rules")
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return includedRules, config, nil
 }
