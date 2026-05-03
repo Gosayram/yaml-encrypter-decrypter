@@ -3,9 +3,18 @@ package encryption
 import (
 	"strings"
 	"testing"
+
+	"github.com/Gosayram/yaml-encrypter-decrypter/pkg/logger"
+	"go.uber.org/zap"
 )
 
 func TestValidateAlgorithm(t *testing.T) {
+	testLogger := zap.NewExample()
+	logger.ReplaceGlobals(testLogger)
+	defer logger.ReplaceGlobals(logger.L())
+
+	testLogger.Info("Starting TestValidateAlgorithm")
+
 	tests := []struct {
 		name          string
 		algorithm     string
@@ -16,7 +25,7 @@ func TestValidateAlgorithm(t *testing.T) {
 		{
 			name:      "empty algorithm string returns default",
 			algorithm: "",
-			expected:  DefaultKeyDerivationAlgorithm,
+			expected:  GetDefaultAlgorithm(),
 		},
 		{
 			name:      "argon2id lowercase",
@@ -37,6 +46,11 @@ func TestValidateAlgorithm(t *testing.T) {
 			name:      "pbkdf2-sha512 lowercase",
 			algorithm: "pbkdf2-sha512",
 			expected:  PBKDF2SHA512Algorithm,
+		},
+		{
+			name:      "algorithm with surrounding spaces",
+			algorithm: "  pbkdf2-sha256  ",
+			expected:  PBKDF2SHA256Algorithm,
 		},
 		{
 			name:          "invalid algorithm",

@@ -1,0 +1,51 @@
+# Configuration file for godoc-lint
+version: "1.0"
+
+# Exclude test files from documentation checks
+exclude:
+  - _test\.go$
+
+# Default set of rules to enable (basic rules are recommended)
+default: basic
+
+# Enable additional rules
+enable:
+  - require-pkg-doc
+
+# Rule options
+options:
+  # Maximum line length for godocs
+  max-len/length: 120
+
+  # Include test files when applying the max-len rule
+  max-len/include-tests: false
+
+  # Include test files when applying the pkg-doc rule
+  pkg-doc/include-tests: false
+
+  # Include test files when applying the single-pkg-doc rule
+  single-pkg-doc/include-tests: false
+
+  # Include test files when applying the require-pkg-doc rule
+  require-pkg-doc/include-tests: false
+
+  # Include test files when applying the require-doc rule
+  require-doc/include-tests: false
+
+  # Ignore exported (public) symbols when applying the require-doc rule
+  require-doc/ignore-exported: false
+
+  # Ignore unexported (private) symbols when applying the require-doc rule
+  require-doc/ignore-unexported: true
+
+  # Include test files when applying the start-with-name rule
+  start-with-name/include-tests: false
+
+  # Include unexported (private) symbols when applying the start-with-name rule
+  start-with-name/include-unexported: false
+
+  # Include test files when applying the require-stdlib-doclink rule
+  require-stdlib-doclink/include-tests: false
+
+  # Include test files when applying the no-unused-link rule
+  no-unused-link/include-tests: false

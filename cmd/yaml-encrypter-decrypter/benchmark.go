@@ -2,13 +2,20 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
+	"sort"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/atlet99/yaml-encrypter-decrypter/pkg/encryption"
+	"github.com/Gosayram/yaml-encrypter-decrypter/pkg/encryption"
+	"github.com/Gosayram/yaml-encrypter-decrypter/pkg/logger"
+	"go.uber.org/zap"
+)
+
+var (
+	// Named logger for benchmark component
+	benchmarkLogger = logger.Named("benchmark")
 )
 
 const (
@@ -52,7 +59,7 @@ func runBenchmarks(outputFile string) int {
 
 	// Output results
 	if err := outputBenchmarkResults(results, outputFile); err != nil {
-		log.Printf("Error outputting benchmark results: %v\n", err)
+		benchmarkLogger.Error("Failed to output benchmark results", zap.Error(err))
 		return 1
 	}
 
@@ -160,7 +167,7 @@ func runDecryptionBenchmarks() []benchmarkResult {
 	// Prepare standard encrypted data
 	encrypted, err := encryption.Encrypt(TestPassword, plaintext)
 	if err != nil {
-		log.Printf("Failed to prepare encrypted data. Please check the application logs for details.")
+		benchmarkLogger.Error("Failed to prepare encrypted data for benchmark")
 		return results
 	}
 
@@ -187,7 +194,9 @@ func runDecryptionBenchmarks() []benchmarkResult {
 	for _, algo := range algorithms {
 		encrypted, err := encryption.Encrypt(TestPassword, plaintext, algo)
 		if err != nil {
-			log.Printf("Failed to prepare encrypted data for %s algorithm.", algo)
+			benchmarkLogger.Error("Failed to prepare encrypted data for algorithm",
+				zap.String("algorithm", string(algo)),
+				zap.Error(err))
 			continue
 		}
 		encryptedData[algo] = encrypted
@@ -242,7 +251,7 @@ func outputBenchmarkResults(results []benchmarkResult, outputFile string) error 
 
 	// Add header
 	output.WriteString("# Benchmark Results\n\n")
-	output.WriteString(fmt.Sprintf("Generated on `%s`\n\n", time.Now().Format(time.RFC1123)))
+	fmt.Fprintf(&output, "Generated on `%s`\n\n", time.Now().Format(time.RFC1123))
 
 	// Group results by category
 	categories := make(map[string][]benchmarkResult)
@@ -250,16 +259,24 @@ func outputBenchmarkResults(results []benchmarkResult, outputFile string) error 
 		categories[r.Category] = append(categories[r.Category], r)
 	}
 
+	// Sort category keys for deterministic output
+	categoryKeys := make([]string, 0, len(categories))
+	for category := range categories {
+		categoryKeys = append(categoryKeys, category)
+	}
+	sort.Strings(categoryKeys)
+
 	// Output each category
-	for category, categoryResults := range categories {
-		output.WriteString(fmt.Sprintf("## %s\n\n", category))
+	for _, category := range categoryKeys {
+		categoryResults := categories[category]
+		fmt.Fprintf(&output, "## %s\n\n", category)
 		output.WriteString("| Algorithm | Operations/sec | Time (ns/op) | Memory (B/op) | Allocs/op |\n")
 		output.WriteString("|-----------|----------------|--------------|---------------|----------|\n")
 
 		for _, r := range categoryResults {
 			opsPerSec := float64(NanosecondsPerSecond) / r.NsPerOp
-			output.WriteString(fmt.Sprintf("| %s | %.2f | %.2f | %d | %d |\n",
-				r.Name, opsPerSec, r.NsPerOp, r.BytesPerOp, r.AllocsPerOp))
+			fmt.Fprintf(&output, "| %s | %.2f | %.2f | %d | %d |\n",
+				r.Name, opsPerSec, r.NsPerOp, r.BytesPerOp, r.AllocsPerOp)
 		}
 
 		output.WriteString("\n")

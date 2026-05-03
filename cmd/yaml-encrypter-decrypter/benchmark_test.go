@@ -4,10 +4,19 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/Gosayram/yaml-encrypter-decrypter/pkg/logger"
+	"go.uber.org/zap"
 )
 
 func TestOutputBenchmarkResults(t *testing.T) {
-	// Создаем тестовые данные
+	testLogger := zap.NewExample()
+	logger.ReplaceGlobals(testLogger)
+	defer logger.ReplaceGlobals(logger.L())
+
+	testLogger.Info("Starting TestOutputBenchmarkResults")
+
+	// Create test data
 	results := []benchmarkResult{
 		{
 			Category:    "Key Derivation",
@@ -35,34 +44,34 @@ func TestOutputBenchmarkResults(t *testing.T) {
 		},
 	}
 
-	// Создаем временный файл для вывода
+	// Create temporary file for output
 	tempFile := "test_benchmark_results.md"
-	defer os.Remove(tempFile) // Удаляем файл после завершения теста
+	defer func() { _ = os.Remove(tempFile) }() // Delete file after test completes
 
-	// Вызываем тестируемую функцию
+	// Call the function under test
 	err := outputBenchmarkResults(results, tempFile)
 	if err != nil {
 		t.Fatalf("outputBenchmarkResults returned error: %v", err)
 	}
 
-	// Проверяем, что файл был создан
+	// Check that the file was created
 	_, err = os.Stat(tempFile)
 	if os.IsNotExist(err) {
 		t.Fatalf("Expected benchmark results file was not created")
 	}
 
-	// Читаем содержимое файла
+	// Read file contents
 	content, err := os.ReadFile(tempFile)
 	if err != nil {
 		t.Fatalf("Failed to read benchmark results file: %v", err)
 	}
 
-	// Проверяем, что содержимое не пустое
+	// Check that content is not empty
 	if len(content) == 0 {
 		t.Errorf("Benchmark results file is empty")
 	}
 
-	// Проверяем, что файл содержит ожидаемые заголовки таблицы
+	// Check that file contains expected table headers
 	expectedHeaders := []string{
 		"# Benchmark Results",
 		"Generated on",
@@ -81,14 +90,14 @@ func TestOutputBenchmarkResults(t *testing.T) {
 		}
 	}
 
-	// Проверяем вывод без файла (на stdout)
+	// Check output without file (to stdout)
 	err = outputBenchmarkResults(results[:1], "")
 	if err != nil {
 		t.Fatalf("outputBenchmarkResults to stdout returned error: %v", err)
 	}
 }
 
-// Вспомогательная функция для проверки содержимого строки
+// Helper function to check string content
 func contains(s, substr string) bool {
 	return strings.Contains(s, substr)
 }

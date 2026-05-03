@@ -1,7 +1,8 @@
+// Package main provides the YAML encrypter/decrypter CLI application.
 package main
 
 import (
-	"github.com/atlet99/yaml-encrypter-decrypter/pkg/encryption"
+	"github.com/Gosayram/yaml-encrypter-decrypter/pkg/encryption"
 )
 
 var (

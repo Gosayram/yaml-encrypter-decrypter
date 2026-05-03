@@ -4,12 +4,20 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Gosayram/yaml-encrypter-decrypter/pkg/logger"
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 )
 
 // TestCertificateFormatting is a comprehensive test for certificate handling
 // with different YAML formatting styles
 func TestCertificateFormatting(t *testing.T) {
+	testLogger := zap.NewExample()
+	logger.ReplaceGlobals(testLogger)
+	defer logger.ReplaceGlobals(logger.L())
+
+	testLogger.Info("Starting TestCertificateFormatting")
+
 	// Test key for encryption/decryption - using a stronger key that meets requirements
 	testKey := "S9f&h27!Gp*3K5^LmZ#qR8@tUvWxYz" // Strong password with uppercase, lowercase, numbers and special chars
 
@@ -61,11 +69,12 @@ GTAXBgNVBAMMEHd3dy5leGFtcGxlLmNvbQ==
 		keyNode := certsNode.Content[i]
 		valueNode := certsNode.Content[i+1]
 
-		if keyNode.Value == "literal_style" {
+		switch keyNode.Value {
+		case "literal_style":
 			valueNode.Style = yaml.LiteralStyle // |
-		} else if keyNode.Value == "quoted_style" {
+		case "quoted_style":
 			valueNode.Style = yaml.DoubleQuotedStyle // "..."
-		} else if keyNode.Value == "nested" {
+		case "nested":
 			// Find the nested cert
 			nestedMapping := valueNode
 			for j := 0; j < len(nestedMapping.Content); j += 2 {
@@ -97,30 +106,18 @@ GTAXBgNVBAMMEHd3dy5leGFtcGxlLmNvbQ==
 	processedPaths := make(map[string]bool)
 	debug := true
 
-	// Encrypt
-	encryptedNode, err := ProcessYAMLContent(styledBytes, testKey, OperationEncrypt, rules, processedPaths, debug)
+	// Encrypt using the function that handles folded style properly
+	encryptedBytes, err := ProcessYAMLContentWithFoldedStyle(styledBytes, testKey, OperationEncrypt, rules, processedPaths, debug)
 	if err != nil {
 		t.Fatalf("Error in encryption: %v", err)
-	}
-
-	// Get the encrypted YAML
-	encryptedBytes, err := yaml.Marshal(encryptedNode)
-	if err != nil {
-		t.Fatalf("Failed to marshal encrypted data: %v", err)
 	}
 
 	t.Logf("Encrypted YAML:\n%s", string(encryptedBytes))
 
 	// Now decrypt the content
-	decryptedNode, err := ProcessYAMLContent(encryptedBytes, testKey, OperationDecrypt, rules, make(map[string]bool), debug)
+	decryptedBytes, err := ProcessYAMLContentWithFoldedStyle(encryptedBytes, testKey, OperationDecrypt, rules, make(map[string]bool), debug)
 	if err != nil {
 		t.Fatalf("Error in decryption: %v", err)
-	}
-
-	// Get the decrypted YAML
-	decryptedBytes, err := yaml.Marshal(decryptedNode)
-	if err != nil {
-		t.Fatalf("Failed to marshal decrypted data: %v", err)
 	}
 
 	t.Logf("Decrypted YAML:\n%s", string(decryptedBytes))

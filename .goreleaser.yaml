@@ -5,6 +5,19 @@ version: 2
 
 project_name: yed
 
+# Environment variables for the build
+env:
+  - CGO_ENABLED=0
+
+# Git configuration
+git:
+  tag_sort: -version:refname
+
+# Retry configuration for operations
+retry:
+  attempts: 3
+  delay: 5
+
 before:
   hooks:
     - go mod tidy
@@ -20,6 +33,8 @@ builds:
       - -trimpath
     ldflags:
       - -X 'main.Version={{ .Env.RELEASE_VERSION }}'
+      - -X 'main.Commit={{ .Commit }}'
+      - -X 'main.Date={{ .CommitDate }}'
       - -s
       - -w
     goos:
@@ -40,6 +55,9 @@ archives:
   - id: default
     # Includes built binaries + files below
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
+    format_overrides:
+      - goos: windows
+        formats: [zip]
     files:
       - README.md
       - LICENSE
@@ -78,6 +96,69 @@ binary_signs:
       - "--detach-sign"
       - "${artifact}"
 
+# Cosign signing for modern Sigstore-based signatures (in addition to GPG)
+sboms:
+  - artifacts: archive
+
+# Source archive for creating source tarballs
+source:
+  enabled: true
+
+# Milestone closing for automatic GitHub milestone management
+milestones:
+  - close: true
+    fail_on_error: false
+
+# Universal binaries for macOS (combines amd64 and arm64)
+universal_binaries:
+  - replace: false
+
+# Go module proxy for faster builds
+gomod:
+  proxy: true
+
+# Report binary sizes in logs
+report_sizes: true
+
+# Metadata generation for debugging and automation
+metadata:
+  mod_timestamp: "{{ .CommitTimestamp }}"
+
+# Docker digest generation for image verification
+docker_digest:
+  name_template: "{{ .ProjectName }}_{{ .Version }}_docker_digests.txt"
+
+# Docker images built through GoReleaser (v2 - modern format)
+dockers_v2:
+  - id: yed
+    dockerfile: Dockerfile
+    images:
+      - "ghcr.io/{{ .Env.DOCKER_REPO_PATH }}"
+    tags:
+      - "{{ .Version }}"
+      - "latest"
+    build_args:
+      VERSION: "{{ .Version }}"
+      COMMIT: "{{ .Commit }}"
+      DATE: "{{ .Date }}"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+      - linux/arm/v7
+      - linux/arm/v6
+      - linux/386
+      - linux/ppc64le
+      - linux/s390x
+      - linux/riscv64
+    labels:
+      org.opencontainers.image.title: yed
+      org.opencontainers.image.description: YAML Encrypter/Decrypter CLI
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.source: "{{ .GitURL }}"
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
+      org.opencontainers.image.created: "{{ .Date }}"
+    sbom: "true"
+
 release:
   mode: replace
   header: |
@@ -93,12 +174,12 @@ release:
     Verify image signatures using the public key from the repository:
 
     ```bash
-    export USERNAME=<your-github-username>
-    cosign login ghcr.io -u "$USERNAME"
     cosign verify --key cosign.pub ghcr.io/{{ .Env.DOCKER_REPO_PATH }}:{{ .Version }}
     ```
 
     The `cosign.pub` file is available in the repository root.
+
+    For more information on Cosign verification, see: https://docs.sigstore.dev/cosign/verify/overview/
 
     ### Binaries (signed with GPG)
 

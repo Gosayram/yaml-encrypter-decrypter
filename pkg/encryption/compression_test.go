@@ -4,10 +4,19 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/Gosayram/yaml-encrypter-decrypter/pkg/logger"
+	"go.uber.org/zap"
 )
 
 // TestCompressDecompress tests the basic functionality of compression and decompression
 func TestCompressDecompress(t *testing.T) {
+	testLogger := zap.NewExample()
+	logger.ReplaceGlobals(testLogger)
+	defer logger.ReplaceGlobals(logger.L())
+
+	testLogger.Info("Starting TestCompressDecompress")
+
 	tests := []struct {
 		name      string
 		data      []byte

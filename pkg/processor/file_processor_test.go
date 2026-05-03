@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"bytes"
 	"encoding/base64"
 	"fmt"
 	"os"
@@ -8,7 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/atlet99/yaml-encrypter-decrypter/pkg/encryption"
+	"github.com/Gosayram/yaml-encrypter-decrypter/pkg/encryption"
+	"github.com/Gosayram/yaml-encrypter-decrypter/pkg/logger"
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 )
 
@@ -17,6 +20,12 @@ var testUnsecureDiffLog = false
 
 // TestFixBase64Padding tests the fixBase64Padding-like functionality
 func TestFixBase64Padding(t *testing.T) {
+	testLogger := zap.NewExample()
+	logger.ReplaceGlobals(testLogger)
+	defer logger.ReplaceGlobals(logger.L())
+
+	testLogger.Info("Starting TestFixBase64Padding")
+
 	tests := []struct {
 		name     string
 		input    string
@@ -470,8 +479,8 @@ func TestSensitiveValueDetection(t *testing.T) {
 			expectedSensitive: true,
 		},
 		{
-			name:              "YED_ENCRYPT_PASSWORD is always sensitive",
-			value:             "YED_ENCRYPT_PASSWORD=123",
+			name:              "YED_ENCRYPTION_KEY is always sensitive",
+			value:             "YED_ENCRYPTION_KEY=123",
 			unsecureDiff:      true,
 			expectedSensitive: true,
 		},
@@ -508,7 +517,7 @@ func TestSensitiveValueDetection(t *testing.T) {
 
 			// Implement the detection logic directly
 			var result bool
-			if strings.Contains(tt.value, "password") || strings.Contains(tt.value, "YED_ENCRYPT_PASSWORD") {
+			if strings.Contains(tt.value, "password") || strings.Contains(tt.value, "YED_ENCRYPTION_KEY") {
 				result = true
 			} else if strings.HasPrefix(tt.value, "AES256:") {
 				result = false // Encrypted values are not sensitive
@@ -525,22 +534,21 @@ func TestSensitiveValueDetection(t *testing.T) {
 	}
 }
 
-// TestFileProcessorProcessFile tests the ProcessFile function with various scenarios
 func TestFileProcessorProcessFile(t *testing.T) {
+	t.Parallel()
+
 	// Set default algorithm for testing
 	encryption.SetDefaultAlgorithm(encryption.Argon2idAlgorithm)
 
-	// Create a test key
-	testKey := "K9#mP2$vL5@nR8&qX3*zAb4C" // Updated to meet minimum length of 20 characters
+	// Extract test key as constant to avoid magic string
+	const testKey = "K9#mP2$vL5@nR8&qX3*zAb4C"
 
 	// First, run encryption test to get encrypted value
 	t.Run("encrypt_simple_yaml", func(t *testing.T) {
-		// Create temporary directory for test files
-		tempDir, err := os.MkdirTemp("", "TestFileProcessorProcessFileEncrypt")
-		if err != nil {
-			t.Fatalf("Failed to create temp dir: %v", err)
-		}
-		defer os.RemoveAll(tempDir)
+		t.Parallel()
+
+		// Use t.TempDir() for automatic cleanup (Go 1.15+)
+		tempDir := t.TempDir()
 
 		// Create test files
 		yamlFile := filepath.Join(tempDir, "encrypt_simple_yaml.yaml")
@@ -566,7 +574,7 @@ password: H7$kM4@nP9#vL2!qX5`
 		}
 
 		// Process the file
-		err = ProcessFile(yamlFile, testKey, OperationEncrypt, true, configFile)
+		err := ProcessFile(yamlFile, testKey, OperationEncrypt, true, configFile)
 		if err != nil {
 			t.Errorf("ProcessFile() error = %v, expectError = %v", err, false)
 			return
@@ -607,12 +615,10 @@ password: H7$kM4@nP9#vL2!qX5`
 
 		// Now run decryption test with the encrypted value
 		t.Run("decrypt_simple_yaml", func(t *testing.T) {
-			// Create new temporary directory for decryption test
-			decryptDir, err := os.MkdirTemp("", "TestFileProcessorProcessFileDecrypt")
-			if err != nil {
-				t.Fatalf("Failed to create temp dir: %v", err)
-			}
-			defer os.RemoveAll(decryptDir)
+			t.Parallel()
+
+			// Use t.TempDir() for automatic cleanup
+			decryptDir := t.TempDir()
 
 			// Create test files for decryption
 			decryptYamlFile := filepath.Join(decryptDir, "decrypt_simple_yaml.yaml")
@@ -630,28 +636,44 @@ password: %s`, encryptedValue)
 				t.Fatalf("Failed to write config file: %v", err)
 			}
 
-			// Process the file
+			// Process the file for decryption
 			err = ProcessFile(decryptYamlFile, testKey, OperationDecrypt, true, decryptConfigFile)
 			if err != nil {
 				t.Errorf("ProcessFile() error = %v, expectError = %v", err, false)
 				return
 			}
 
-			// Verify the content was decrypted
+			// Read decrypted content
 			decryptedContent, err := os.ReadFile(decryptYamlFile)
 			if err != nil {
-				t.Fatalf("Failed to read processed file: %v", err)
+				t.Fatalf("Failed to read decrypted file: %v", err)
 			}
 
 			// Parse the YAML to verify decryption
 			var decryptedNode yaml.Node
 			if err := yaml.Unmarshal(decryptedContent, &decryptedNode); err != nil {
-				t.Fatalf("Failed to parse processed YAML: %v", err)
+				t.Fatalf("Failed to parse decrypted YAML: %v", err)
 			}
 
-			// Find the password field and verify it's decrypted
-			if err := verifyDecryption(&decryptedNode, "password", testKey); err != nil {
-				t.Errorf("Decryption verification failed: %v", err)
+			// Verify password was decrypted correctly
+			decryptedValue := ""
+			decryptedRoot := decryptedNode.Content[0]
+			for i := 0; i < len(decryptedRoot.Content); i += 2 {
+				if i+1 >= len(decryptedRoot.Content) {
+					continue
+				}
+
+				keyNode := decryptedRoot.Content[i]
+				valueNode := decryptedRoot.Content[i+1]
+
+				if keyNode.Value == "password" {
+					decryptedValue = valueNode.Value
+					break
+				}
+			}
+
+			if decryptedValue != "H7$kM4@nP9#vL2!qX5" {
+				t.Errorf("Password not decrypted correctly, got: %s", decryptedValue)
 			}
 		})
 	})
@@ -700,12 +722,10 @@ password: H7$kM4@nP9#vL2!qX5`,
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create temporary directory for test files
-			tempDir, err := os.MkdirTemp("", "TestFileProcessorProcessFile")
-			if err != nil {
-				t.Fatalf("Failed to create temp dir: %v", err)
-			}
-			defer os.RemoveAll(tempDir)
+			t.Parallel()
+
+			// Use t.TempDir() for automatic cleanup (Go 1.15+)
+			tempDir := t.TempDir()
 
 			// Create test files
 			yamlFile := filepath.Join(tempDir, tt.name+".yaml")
@@ -722,7 +742,7 @@ password: H7$kM4@nP9#vL2!qX5`,
 			}
 
 			// Process the file
-			err = ProcessFile(yamlFile, tt.key, tt.operation, true, configFile)
+			err := ProcessFile(yamlFile, tt.key, tt.operation, true, configFile)
 
 			// Check error expectation
 			if tt.expectError {
@@ -794,36 +814,6 @@ func verifyEncryption(node *yaml.Node, fieldPath, key string) error {
 	}
 
 	return nil
-}
-
-// verifyDecryption checks if a field is properly decrypted
-func verifyDecryption(node *yaml.Node, fieldName, key string) error {
-	if node.Kind != yaml.DocumentNode || len(node.Content) == 0 {
-		return fmt.Errorf("invalid YAML document structure")
-	}
-
-	root := node.Content[0]
-	if root.Kind != yaml.MappingNode {
-		return fmt.Errorf("root node is not a mapping")
-	}
-
-	for i := 0; i < len(root.Content); i += 2 {
-		if i+1 >= len(root.Content) {
-			continue
-		}
-
-		keyNode := root.Content[i]
-		valueNode := root.Content[i+1]
-
-		if keyNode.Value == fieldName {
-			if strings.HasPrefix(valueNode.Value, AES) {
-				return fmt.Errorf("field %s is still encrypted", fieldName)
-			}
-			return nil
-		}
-	}
-
-	return fmt.Errorf("field %s not found", fieldName)
 }
 
 // TestFileProcessorEmptyConfig tests loading rules with an empty config file
@@ -927,7 +917,7 @@ encryption:
 	}
 
 	// Test ShowDiff (this will output to stdout)
-	testKey := "test-key-12345"
+	testKey := "S9f&h27!Gp*3K5^LmZ#qR8@tUvWxYz"
 	err = ShowDiff(filename, testKey, "encrypt", true, configPath)
 	if err != nil {
 		t.Errorf("ShowDiff() failed: %v", err)
@@ -982,12 +972,10 @@ password: test123`,
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create temporary directory for test files
-			tempDir, err := os.MkdirTemp("", "TestProcessFileErrors")
-			if err != nil {
-				t.Fatalf("Failed to create temp dir: %v", err)
-			}
-			defer os.RemoveAll(tempDir)
+			t.Parallel()
+
+			// Use t.TempDir() for automatic cleanup (Go 1.15+)
+			tempDir := t.TempDir()
 
 			// Create test files
 			yamlFile := filepath.Join(tempDir, tt.name+".yaml")
@@ -1004,7 +992,7 @@ password: test123`,
 			}
 
 			// Process the file
-			err = ProcessFile(yamlFile, tt.key, tt.operation, true, configFile)
+			err := ProcessFile(yamlFile, tt.key, tt.operation, true, configFile)
 
 			// Check error expectation
 			if tt.expectError {
@@ -1120,12 +1108,10 @@ func TestProcessYAMLWithExclusionsExtended(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create temporary directory for test files
-			tempDir, err := os.MkdirTemp("", "TestProcessYAMLWithExclusionsExtended")
-			if err != nil {
-				t.Fatalf("Failed to create temp dir: %v", err)
-			}
-			defer os.RemoveAll(tempDir)
+			t.Parallel()
+
+			// Use t.TempDir() for automatic cleanup (Go 1.15+)
+			tempDir := t.TempDir()
 
 			// Create test files
 			yamlFile := filepath.Join(tempDir, tt.name+".yaml")
@@ -1142,7 +1128,7 @@ func TestProcessYAMLWithExclusionsExtended(t *testing.T) {
 			}
 
 			// Process the file
-			err = ProcessFile(yamlFile, tt.key, tt.operation, true, configFile)
+			err := ProcessFile(yamlFile, tt.key, tt.operation, true, configFile)
 
 			// Check error expectation
 			if tt.expectError {
@@ -1170,7 +1156,8 @@ func TestProcessYAMLWithExclusionsExtended(t *testing.T) {
 			}
 
 			// Verify exclusions were handled correctly
-			if tt.name == "encrypt_with_excludes" {
+			switch tt.name {
+			case "encrypt_with_excludes":
 				// First verify exclusions
 				if err := verifyExclusion(&node, "config.public_key"); err != nil {
 					t.Errorf("Exclusion verification failed: %v", err)
@@ -1185,7 +1172,7 @@ func TestProcessYAMLWithExclusionsExtended(t *testing.T) {
 				if err := verifyEncryption(&node, "config.api_key", tt.key); err != nil {
 					t.Errorf("Encryption verification failed for api_key: %v", err)
 				}
-			} else if tt.name == "process_mapping_with_exclusions" {
+			case "process_mapping_with_exclusions":
 				// First verify exclusions
 				if err := verifyExclusion(&node, "users.public.key"); err != nil {
 					t.Errorf("Exclusion verification failed: %v", err)
@@ -1201,6 +1188,11 @@ func TestProcessYAMLWithExclusionsExtended(t *testing.T) {
 
 // TestProcessYAMLWithExclusions tests additional exclusion scenarios
 func TestProcessYAMLWithExclusions(t *testing.T) {
+	t.Parallel()
+
+	// Extract test keys as constants to avoid magic strings
+	const testKeyShort = "K9#mP2$vL5@nR8&qX3"
+
 	tests := []struct {
 		name          string
 		yamlContent   string
@@ -1226,7 +1218,7 @@ func TestProcessYAMLWithExclusions(t *testing.T) {
       block: config
       pattern: username|password|api_key
       action: encrypt`,
-			key:       "K9#mP2$vL5@nR8&qX3",
+			key:       testKeyShort,
 			operation: "encrypt",
 			verifyFunc: func(t *testing.T, content string, key string) {
 				// Parse the YAML to verify processing
@@ -1269,7 +1261,7 @@ func TestProcessYAMLWithExclusions(t *testing.T) {
       block: users.admin
       pattern: password
       action: encrypt`,
-			key:       "K9#mP2$vL5@nR8&qX3",
+			key:       testKeyShort,
 			operation: "encrypt",
 			verifyFunc: func(t *testing.T, content string, key string) {
 				// Parse the YAML to verify processing
@@ -1293,12 +1285,10 @@ func TestProcessYAMLWithExclusions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create temporary directory for test files
-			tempDir, err := os.MkdirTemp("", "TestProcessYAMLWithExclusions")
-			if err != nil {
-				t.Fatalf("Failed to create temp dir: %v", err)
-			}
-			defer os.RemoveAll(tempDir)
+			t.Parallel()
+
+			// Use t.TempDir() for automatic cleanup (Go 1.15+)
+			tempDir := t.TempDir()
 
 			// Create test files
 			yamlFile := filepath.Join(tempDir, tt.name+".yaml")
@@ -1328,5 +1318,76 @@ func TestProcessYAMLWithExclusions(t *testing.T) {
 			// Verify the result
 			tt.verifyFunc(t, string(processedContent), tt.key)
 		})
+	}
+}
+
+func TestProcessFile_PreservesFormattingAfterEncryptDecrypt(t *testing.T) {
+	t.Parallel()
+
+	// Use t.TempDir() for automatic cleanup (Go 1.15+)
+	tempDir := t.TempDir()
+
+	yamlFile := filepath.Join(tempDir, "sample.yaml")
+	configFile := filepath.Join(tempDir, "config.yaml")
+
+	// Extract test key as constant to avoid magic string
+	const testKey = "K9#mP2$vL5@nR8&qX3*zAb4C"
+
+	original := []byte(`# top comment
+service:
+  username: admin
+  password: "pa ss # keep comment" # inline comment
+  notes: >-
+    keep
+    folded
+
+  nested:
+    key: value
+`)
+
+	config := []byte(`encryption:
+  rules:
+    - name: encrypt_password_only
+      block: service
+      pattern: password
+      action: encrypt
+`)
+
+	if err := os.WriteFile(yamlFile, original, 0644); err != nil {
+		t.Fatalf("Failed to write yaml file: %v", err)
+	}
+	if err := os.WriteFile(configFile, config, 0644); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+
+	if err := ProcessFile(yamlFile, testKey, OperationEncrypt, false, configFile); err != nil {
+		t.Fatalf("encrypt ProcessFile failed: %v", err)
+	}
+
+	encryptedContent, err := os.ReadFile(yamlFile)
+	if err != nil {
+		t.Fatalf("Failed to read encrypted file: %v", err)
+	}
+	if !bytes.Contains(encryptedContent, []byte("AES256:")) {
+		t.Fatalf("encrypted file does not contain AES256 value")
+	}
+	if !bytes.Contains(encryptedContent, []byte("notes: >-")) {
+		t.Fatalf("folded style marker changed unexpectedly after encryption")
+	}
+	if !bytes.Contains(encryptedContent, []byte("# inline comment")) {
+		t.Fatalf("inline comment was lost after encryption")
+	}
+
+	// Decrypt and verify formatting is preserved
+	if err := ProcessFile(yamlFile, testKey, OperationDecrypt, false, configFile); err != nil {
+		t.Fatalf("decrypt ProcessFile failed: %v", err)
+	}
+
+	decryptedContent, err := os.ReadFile(yamlFile)
+	if err != nil {
+		t.Fatalf("Failed to read decrypted file: %v", err)
+	}
+	if !bytes.Equal(decryptedContent, original) {
+		t.Fatalf("Decrypted content does not match original")
 	}
 }

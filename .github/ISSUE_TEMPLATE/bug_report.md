@@ -3,7 +3,7 @@ name: 🐛 Bug Report
 about: Report something that isn't working correctly
 title: '[BUG] Brief description of the issue'
 labels: ['bug', 'help wanted']
-assignees: ['atlet99']
+assignees: ['Gosayram']
 
 ---
 

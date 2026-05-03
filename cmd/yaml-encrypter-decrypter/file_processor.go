@@ -2,14 +2,20 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"github.com/atlet99/yaml-encrypter-decrypter/pkg/processor"
+	"github.com/Gosayram/yaml-encrypter-decrypter/pkg/logger"
+	"github.com/Gosayram/yaml-encrypter-decrypter/pkg/processor"
 	"github.com/awnumar/memguard"
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
+)
+
+var (
+	// Named logger for file processor component
+	fileProcessorLogger = logger.Named("file-processor")
 )
 
 // processFileWithInterruptHandling processes the file and handles interruption signals
@@ -24,7 +30,8 @@ func processFileWithInterruptHandling(flags appFlags, keyBuffer *memguard.Locked
 	// Process file in a goroutine
 	go func() {
 		if flags.diff {
-			log.Printf("[DEBUG] Before ShowDiff: configPath='%s'", flags.configPath)
+			fileProcessorLogger.Debug("Before ShowDiff",
+				zap.String("config_path", flags.configPath))
 			errChan <- processor.ShowDiff(flags.filename, string(keyBuffer.Bytes()), flags.operation, flags.debug, flags.configPath)
 			return
 		}
@@ -41,19 +48,19 @@ func processFileWithInterruptHandling(flags appFlags, keyBuffer *memguard.Locked
 	select {
 	case err := <-errChan:
 		if err != nil {
-			log.Printf("Error: %v\n", err)
+			fileProcessorLogger.Error("Processing error", zap.Error(err))
 			return 1
 		}
 		return 0
 	case <-sigChan:
-		log.Println("Operation interrupted")
+		fileProcessorLogger.Warn("Operation interrupted")
 		return 1
 	}
 }
 
 // handleDryRun processes the file for dry-run mode
 func handleDryRun(filename string, keyBuffer *memguard.LockedBuffer, operation string, rules []processor.Rule, debug bool, configPath string) error {
-	content, err := os.ReadFile(filename)
+	content, err := os.ReadFile(filename) // #nosec G304 -- filename is an explicit user-provided CLI argument
 	if err != nil {
 		return fmt.Errorf("error reading file: %v", err)
 	}

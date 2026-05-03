@@ -5,12 +5,20 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/atlet99/yaml-encrypter-decrypter/pkg/encryption"
+	"github.com/Gosayram/yaml-encrypter-decrypter/pkg/encryption"
+	"github.com/Gosayram/yaml-encrypter-decrypter/pkg/logger"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 )
 
 func TestDetectMultilineStyle(t *testing.T) {
+	testLogger := zap.NewExample()
+	logger.ReplaceGlobals(testLogger)
+	defer logger.ReplaceGlobals(logger.L())
+
+	testLogger.Info("Starting TestDetectMultilineStyle")
+
 	tests := []struct {
 		name     string
 		node     *yaml.Node
@@ -274,11 +282,6 @@ func TestDecryptMultilinePreservesPEMFormat(t *testing.T) {
 	// Check that the value was properly transformed and style was restored
 	assert.Equal(t, expectedDecrypted, node.Value)
 	assert.Equal(t, originalStyle, node.Style)
-}
-
-func TestHasCertificateKeyPatterns(t *testing.T) {
-	// Skip this test as the hasCertificateKeyPatterns function has been removed
-	t.Skip("Test skipped: hasCertificateKeyPatterns function has been removed")
 }
 
 func TestDecryptCertificatesPreservesFormat(t *testing.T) {
@@ -634,10 +637,9 @@ backend web_backend
 
 func TestProcessConfigurationNode(t *testing.T) {
 	tests := []struct {
-		name       string
-		content    string
-		operation  string
-		shouldSkip bool
+		name      string
+		content   string
+		operation string
 	}{
 		{
 			name: "nginx_config_encrypt",
@@ -649,8 +651,7 @@ func TestProcessConfigurationNode(t *testing.T) {
     proxy_pass http://backend;
   }
 }`,
-			operation:  OperationEncrypt,
-			shouldSkip: true, // Skip test as it's causing issues with configuration detection
+			operation: OperationEncrypt,
 		},
 		{
 			name: "apache_config_encrypt",
@@ -664,24 +665,17 @@ func TestProcessConfigurationNode(t *testing.T) {
     Require all granted
   </Directory>
 </VirtualHost>`,
-			operation:  OperationEncrypt,
-			shouldSkip: true, // Skip test as it's causing issues with configuration detection
+			operation: OperationEncrypt,
 		},
 		{
-			name:       "non-config_content",
-			content:    "This is line 1\nThis is line 2\nThis is line 3",
-			operation:  OperationEncrypt,
-			shouldSkip: true, // Skip test as it's causing issues with configuration detection
+			name:      "non-config_content",
+			content:   "This is line 1\nThis is line 2\nThis is line 3",
+			operation: OperationEncrypt,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.shouldSkip {
-				t.Skip("Skipping test due to known issues with configuration detection")
-				return
-			}
-
 			// Create node with the content
 			node := &yaml.Node{
 				Kind:  yaml.ScalarNode,
@@ -727,7 +721,6 @@ func TestPreserveExactFormatting(t *testing.T) {
 		format         yaml.Style
 		content        string
 		expectedResult string // Expected result
-		skip           bool
 	}{
 		{
 			name:           "certificate with literal style",
@@ -758,7 +751,6 @@ func TestPreserveExactFormatting(t *testing.T) {
 			format:         yaml.FoldedStyle,
 			content:        "This is line 1\nThis is line 2\nThis is line 3",
 			expectedResult: "This is line 1\nThis is line 2\nThis is line 3",
-			skip:           false, // Now supporting folded style using protectFoldedStyleSections
 		},
 		{
 			name:           "single line text with literal style",
@@ -782,12 +774,6 @@ func TestPreserveExactFormatting(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Skip test if marked to skip
-			if tt.skip {
-				t.Skip("Skipping test for unsupported YAML style")
-				return
-			}
-
 			// For folded style, use our special handling with protectFoldedStyleSections
 			if tt.format == yaml.FoldedStyle {
 				// Create test YAML content
@@ -1064,12 +1050,10 @@ MzAxNTAwMDBa
 			style:   yaml.LiteralStyle,
 			content: certContent,
 		},
-		// Folded style is not supported, so we expect an error
 		{
-			name:      "PEM certificate with folded style",
-			style:     yaml.FoldedStyle,
-			content:   certContent,
-			expectErr: true,
+			name:    "PEM certificate with folded style",
+			style:   yaml.FoldedStyle,
+			content: certContent,
 		},
 		{
 			name:    "PEM certificate with double-quoted style (escaped newlines)",
@@ -1099,7 +1083,7 @@ MzAxNTAwMDBa
 			// Expected value after decryption (with real newlines instead of escaped ones)
 			expectedContent := originalContent
 			if originalStyle == yaml.DoubleQuotedStyle {
-				expectedContent = strings.Replace(expectedContent, "\\n", "\n", -1)
+				expectedContent = strings.ReplaceAll(expectedContent, "\\n", "\n")
 			}
 
 			// Encrypt the value
@@ -1107,15 +1091,6 @@ MzAxNTAwMDBa
 
 			// Check if the expected error occurred
 			if tt.expectErr {
-				// If we expect an error, check that the style and content didn't change
-				if err == nil && tt.style == yaml.FoldedStyle {
-					// For folded style, the library doesn't return an error, but it doesn't encrypt either
-					if strings.HasPrefix(node.Value, AES) {
-						t.Errorf("Folded style should not be encrypted but was: %s", node.Value)
-					}
-					return
-				}
-
 				if err == nil {
 					t.Errorf("Expected error for style %v but got none", tt.style)
 				}
@@ -1136,6 +1111,8 @@ MzAxNTAwMDBa
 			switch originalStyle {
 			case yaml.LiteralStyle:
 				expectedSuffix = LiteralStyleSuffix
+			case yaml.FoldedStyle:
+				expectedSuffix = FoldedStyleSuffix
 			case yaml.DoubleQuotedStyle:
 				expectedSuffix = DoubleQuotedStyleSuffix
 			case yaml.SingleQuotedStyle:
@@ -1177,6 +1154,42 @@ MzAxNTAwMDBa
 					originalStyle, node.Style)
 			}
 		})
+	}
+}
+
+func TestFoldedStyleRoundTripIsEncrypted(t *testing.T) {
+	testKey := "S9f&h27!Gp*3K5^LmZ#qR8@tUvWxYz"
+	original := "first line\nsecond line\nthird line"
+
+	node := &yaml.Node{
+		Kind:  yaml.ScalarNode,
+		Style: yaml.FoldedStyle,
+		Value: original,
+	}
+
+	if err := EncryptMultiline(node, testKey, false); err != nil {
+		t.Fatalf("EncryptMultiline() error = %v", err)
+	}
+
+	if !strings.HasPrefix(node.Value, AES) {
+		t.Fatalf("expected folded node to be encrypted, got: %s", node.Value)
+	}
+	if !strings.HasSuffix(node.Value, FoldedStyleSuffix) {
+		t.Fatalf("expected folded style suffix, got: %s", node.Value)
+	}
+
+	if err := DecryptMultiline(node, func(value string) (string, error) {
+		valueToDecrypt := strings.TrimPrefix(value, AES)
+		return encryption.DecryptToString(valueToDecrypt, testKey)
+	}); err != nil {
+		t.Fatalf("DecryptMultiline() error = %v", err)
+	}
+
+	if node.Value != original {
+		t.Fatalf("decrypted value mismatch: got %q want %q", node.Value, original)
+	}
+	if node.Style != yaml.FoldedStyle {
+		t.Fatalf("expected folded style restored, got %v", node.Style)
 	}
 }
 
@@ -1630,10 +1643,11 @@ func TestPreserveExactFormattingUpdated(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create test YAML content
 			yamlContent := fmt.Sprintf("content: %s", tt.content)
-			if tt.format == yaml.FoldedStyle {
+			switch tt.format {
+			case yaml.FoldedStyle:
 				// For folded style, we need special formatting
 				yamlContent = "content: >-\n  " + strings.ReplaceAll(tt.content, "\n", "\n  ")
-			} else if tt.format == yaml.LiteralStyle {
+			case yaml.LiteralStyle:
 				// For literal style, we need special formatting
 				yamlContent = "content: |\n  " + strings.ReplaceAll(tt.content, "\n", "\n  ")
 			}
