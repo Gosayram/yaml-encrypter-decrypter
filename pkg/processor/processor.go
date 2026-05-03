@@ -41,7 +41,11 @@ func processYAMLContent(content []byte, key, operation string, rules []Rule, pro
 
 	var node yaml.Node
 	if err := yaml.Unmarshal(protectedContent, &node); err != nil {
-		return nil, fmt.Errorf("error parsing YAML: %w", err)
+		// Provide more detailed error message for YAML parsing failures
+		if typeErr, ok := err.(*yaml.TypeError); ok {
+			return nil, fmt.Errorf("YAML parsing error: %w (lines: %v)", err, typeErr.Errors)
+		}
+		return nil, fmt.Errorf("YAML parsing error: %w (check for invalid syntax, indentation, or structure)", err)
 	}
 
 	// Create a map to track excluded paths
@@ -73,7 +77,11 @@ func ProcessYAMLContentWithFoldedStyle(content []byte, key, operation string, ru
 
 	var node yaml.Node
 	if err := yaml.Unmarshal(content, &node); err != nil {
-		return nil, fmt.Errorf("error parsing YAML: %w", err)
+		// Provide more detailed error message for YAML parsing failures
+		if typeErr, ok := err.(*yaml.TypeError); ok {
+			return nil, fmt.Errorf("YAML parsing error: %w (lines: %v)", err, typeErr.Errors)
+		}
+		return nil, fmt.Errorf("YAML parsing error: %w (check for invalid syntax, indentation, or structure)", err)
 	}
 
 	// Create a map to track excluded paths

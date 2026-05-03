@@ -158,3 +158,19 @@ func AllSettings() map[string]interface{} {
 	}
 	return v.AllSettings()
 }
+
+// GetSubConfig extracts a nested configuration subtree for a specific component
+// This is useful for organizing complex configurations and passing component-specific settings
+func GetSubConfig(key string) (*viper.Viper, error) {
+	v := viper.GetViper()
+	if v == nil {
+		return nil, fmt.Errorf("viper instance is nil")
+	}
+
+	sub := v.Sub(key)
+	if sub == nil {
+		return nil, fmt.Errorf("sub-config key '%s' not found", key)
+	}
+
+	return sub, nil
+}

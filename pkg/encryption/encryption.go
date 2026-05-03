@@ -323,6 +323,10 @@ func Encrypt(password, plaintext string, algorithm ...KeyDerivationAlgorithm) (s
 
 	// Securely wipe sensitive data
 	memguard.WipeBytes(key)
+	memguard.WipeBytes(salt)
+	memguard.WipeBytes(nonce)
+	memguard.WipeBytes(compressed)
+	memguard.WipeBytes(ciphertext)
 	encryptionLogger.Debug("Sensitive data wiped")
 
 	return encoded, nil
@@ -677,11 +681,13 @@ func decryptWithAlgorithm(password string, algo KeyDerivationAlgorithm, algorith
 	if err != nil {
 		return "", fmt.Errorf("failed to decrypt data: %w", err)
 	}
+	defer memguard.WipeBytes(decryptedData)
 
 	decompressedData, err := decompress(decryptedData)
 	if err != nil {
 		return "", fmt.Errorf("failed to decompress data: %w", err)
 	}
+	defer memguard.WipeBytes(decompressedData)
 
 	return string(decompressedData), nil
 }

@@ -29,11 +29,12 @@ var (
 
 // Config holds logger configuration
 type Config struct {
-	Level           string // debug, info, warn, error
-	Development     bool   // development mode with console output
-	Encoding        string // json or console
-	OutputPath      string // stdout, stderr, or file path
-	SamplingEnabled bool   // enable sampling for high-frequency logs
+	Level           string                // debug, info, warn, error
+	Development     bool                  // development mode with console output
+	Encoding        string                // json or console
+	OutputPath      string                // stdout, stderr, or file path
+	SamplingEnabled bool                  // enable sampling for high-frequency logs
+	EncoderConfig   zapcore.EncoderConfig // custom encoder configuration
 }
 
 // DefaultConfig returns default logger configuration
@@ -63,10 +64,39 @@ func Initialize(cfg Config) error {
 		}
 	}
 
+	// Use custom encoder configuration if provided
+	if cfg.EncoderConfig.EncodeTime != nil || cfg.EncoderConfig.EncodeLevel != nil {
+		if cfg.EncoderConfig.TimeKey == "" {
+			cfg.EncoderConfig.TimeKey = "timestamp"
+		}
+		if cfg.EncoderConfig.LevelKey == "" {
+			cfg.EncoderConfig.LevelKey = "level"
+		}
+		if cfg.EncoderConfig.NameKey == "" {
+			cfg.EncoderConfig.NameKey = "logger"
+		}
+		if cfg.EncoderConfig.CallerKey == "" {
+			cfg.EncoderConfig.CallerKey = "caller"
+		}
+		if cfg.EncoderConfig.MessageKey == "" {
+			cfg.EncoderConfig.MessageKey = "message"
+		}
+		if cfg.EncoderConfig.StacktraceKey == "" {
+			cfg.EncoderConfig.StacktraceKey = "stacktrace"
+		}
+		if cfg.EncoderConfig.LineEnding == "" {
+			cfg.EncoderConfig.LineEnding = zapcore.DefaultLineEnding
+		}
+		zapConfig.EncoderConfig = cfg.EncoderConfig
+	}
+
 	logger, err := zapConfig.Build()
 	if err != nil {
 		return err
 	}
+
+	// Add caller information for better debugging
+	logger = logger.WithOptions(zap.AddCaller())
 
 	// Add stack traces for error-level logs for better debugging
 	logger = logger.WithOptions(zap.AddStacktrace(zapcore.ErrorLevel))
