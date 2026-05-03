@@ -160,7 +160,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.2.2] - 2024-11-15
 
 ### Added
-- [feature/encryption] - add functional tests with 80%+ coverage; update components and fix encryption bugsж (#35)
+- [feature/encryption] - add functional tests with 80%+ coverage; update components and fix encryption bugs (#35)
 
 ### Changed
 - Update .release-version with version and build ID
