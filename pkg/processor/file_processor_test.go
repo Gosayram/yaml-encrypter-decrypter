@@ -928,7 +928,7 @@ encryption:
 	}
 
 	// Test ShowDiff (this will output to stdout)
-	testKey := "test-key-12345"
+	testKey := "S9f&h27!Gp*3K5^LmZ#qR8@tUvWxYz"
 	err = ShowDiff(filename, testKey, "encrypt", true, configPath)
 	if err != nil {
 		t.Errorf("ShowDiff() failed: %v", err)

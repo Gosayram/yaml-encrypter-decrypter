@@ -98,30 +98,18 @@ GTAXBgNVBAMMEHd3dy5leGFtcGxlLmNvbQ==
 	processedPaths := make(map[string]bool)
 	debug := true
 
-	// Encrypt
-	encryptedNode, err := ProcessYAMLContent(styledBytes, testKey, OperationEncrypt, rules, processedPaths, debug)
+	// Encrypt using the function that handles folded style properly
+	encryptedBytes, err := ProcessYAMLContentWithFoldedStyle(styledBytes, testKey, OperationEncrypt, rules, processedPaths, debug)
 	if err != nil {
 		t.Fatalf("Error in encryption: %v", err)
-	}
-
-	// Get the encrypted YAML
-	encryptedBytes, err := yaml.Marshal(encryptedNode)
-	if err != nil {
-		t.Fatalf("Failed to marshal encrypted data: %v", err)
 	}
 
 	t.Logf("Encrypted YAML:\n%s", string(encryptedBytes))
 
 	// Now decrypt the content
-	decryptedNode, err := ProcessYAMLContent(encryptedBytes, testKey, OperationDecrypt, rules, make(map[string]bool), debug)
+	decryptedBytes, err := ProcessYAMLContentWithFoldedStyle(encryptedBytes, testKey, OperationDecrypt, rules, make(map[string]bool), debug)
 	if err != nil {
 		t.Fatalf("Error in decryption: %v", err)
-	}
-
-	// Get the decrypted YAML
-	decryptedBytes, err := yaml.Marshal(decryptedNode)
-	if err != nil {
-		t.Fatalf("Failed to marshal decrypted data: %v", err)
 	}
 
 	t.Logf("Decrypted YAML:\n%s", string(decryptedBytes))

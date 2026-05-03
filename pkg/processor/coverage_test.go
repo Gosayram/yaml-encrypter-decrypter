@@ -1,11 +1,12 @@
 package processor
 
 import (
-	"github.com/stretchr/testify/assert"
-	"gopkg.in/yaml.v3"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"gopkg.in/yaml.v3"
 )
 
 func TestLoadRulesFromPattern(t *testing.T) {
@@ -447,7 +448,7 @@ func TestLoadRulesFromPattern_RangeAndNonYaml(t *testing.T) {
 }
 
 func TestPrintDiff_NilCoverage(t *testing.T) {
-	printDiff(nil, nil, false, false, "")
+	printDiff(nil, nil, false, false, "", &diffStats{})
 }
 
 func TestProcessNodeForDiff_NilAndUnknown(t *testing.T) {

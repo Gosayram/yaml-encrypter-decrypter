@@ -1884,6 +1884,7 @@ func TestProcessDiffRespectsDecryptOperation(t *testing.T) {
 					Action:  "encrypt",
 				},
 			},
+			UnsecureDiff: true,
 		},
 	}
 
@@ -3223,7 +3224,7 @@ func TestProcessSequenceNodeForDiff(t *testing.T) {
 	originalNode := deepCopyNode(sequenceNode)
 
 	// Process the node for diff
-	processSequenceNodeForDiff(sequenceNode, key, operation, false, true)
+	processNodeForDiff(sequenceNode, key, operation, false, true)
 
 	// Verify all items were processed
 	for i, item := range sequenceNode.Content {
@@ -3234,7 +3235,7 @@ func TestProcessSequenceNodeForDiff(t *testing.T) {
 
 	// Test with isOriginal=true (should not modify the items)
 	sequenceNode = deepCopyNode(originalNode)
-	processSequenceNodeForDiff(sequenceNode, key, operation, true, true)
+	processNodeForDiff(sequenceNode, key, operation, true, true)
 
 	// Verify no items were modified
 	for i, item := range sequenceNode.Content {
@@ -3266,7 +3267,7 @@ func TestProcessSequenceNodeForDiff(t *testing.T) {
 	}
 
 	// Process with nested elements
-	processSequenceNodeForDiff(nestedSequence, key, operation, false, true)
+	processNodeForDiff(nestedSequence, key, operation, false, true)
 
 	// Verify all items were processed including nested ones
 	if !strings.HasPrefix(nestedSequence.Content[0].Value, AES) {
@@ -3316,7 +3317,7 @@ func TestPrintSequenceDiff(t *testing.T) {
 	SetDiffOutput(&buf)
 	defer SetDiffOutput(nil)
 
-	printSequenceDiff(original, processed, true, false, "test.path")
+	printSequenceDiff(original, processed, true, false, "test.path", &diffStats{})
 	output := buf.String()
 
 	// Verify output contains the expected diffs
@@ -3333,7 +3334,7 @@ func TestPrintSequenceDiff(t *testing.T) {
 
 	// Test with unsecureDiff=true
 	buf.Reset()
-	printSequenceDiff(original, processed, true, true, "test.path")
+	printSequenceDiff(original, processed, true, true, "test.path", &diffStats{})
 	unsecureOutput := buf.String()
 
 	// Verify unsecure output shows the actual encrypted values
@@ -3351,7 +3352,7 @@ func TestPrintSequenceDiff(t *testing.T) {
 	}
 
 	// Call with different length sequences (must not panic).
-	printSequenceDiff(shortOriginal, processed, true, false, "test.path")
+	printSequenceDiff(shortOriginal, processed, true, false, "test.path", &diffStats{})
 }
 
 func TestPrintScalarDiffMasksOriginalSensitiveValueInSecureMode(t *testing.T) {
@@ -3370,7 +3371,7 @@ func TestPrintScalarDiffMasksOriginalSensitiveValueInSecureMode(t *testing.T) {
 	SetDiffOutput(&buf)
 	defer SetDiffOutput(nil)
 
-	printScalarDiff(original, processed, false, false, "config.password")
+	printScalarDiff(original, processed, false, false, "config.password", &diffStats{})
 	secureOutput := buf.String()
 	if !strings.Contains(secureOutput, MaskedValue) {
 		t.Fatalf("expected secure diff to mask original sensitive value, got: %s", secureOutput)
@@ -3380,7 +3381,7 @@ func TestPrintScalarDiffMasksOriginalSensitiveValueInSecureMode(t *testing.T) {
 	}
 
 	buf.Reset()
-	printScalarDiff(original, processed, false, true, "config.password")
+	printScalarDiff(original, processed, false, true, "config.password", &diffStats{})
 	unsecureOutput := buf.String()
 	if !strings.Contains(unsecureOutput, "supersecretvalue") {
 		t.Fatalf("expected unsecure diff to show original value, got: %s", unsecureOutput)
@@ -3403,7 +3404,7 @@ func TestPrintScalarDiffMasksProcessedSensitiveValueInSecureModeForDecrypt(t *te
 	SetDiffOutput(&buf)
 	defer SetDiffOutput(nil)
 
-	printScalarDiff(original, processed, false, false, "config.password")
+	printScalarDiff(original, processed, false, false, "config.password", &diffStats{})
 	secureOutput := buf.String()
 	if strings.Contains(secureOutput, "decrypted-super-secret") {
 		t.Fatalf("expected secure diff to hide processed plaintext, got: %s", secureOutput)
@@ -3413,7 +3414,7 @@ func TestPrintScalarDiffMasksProcessedSensitiveValueInSecureModeForDecrypt(t *te
 	}
 
 	buf.Reset()
-	printScalarDiff(original, processed, false, true, "config.password")
+	printScalarDiff(original, processed, false, true, "config.password", &diffStats{})
 	unsecureOutput := buf.String()
 	if !strings.Contains(unsecureOutput, "decrypted-super-secret") {
 		t.Fatalf("expected unsecure diff to show processed plaintext, got: %s", unsecureOutput)
