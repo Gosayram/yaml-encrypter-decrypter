@@ -4,9 +4,18 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/atlet99/yaml-encrypter-decrypter/pkg/logger"
+	"go.uber.org/zap"
 )
 
 func TestOutputBenchmarkResults(t *testing.T) {
+	testLogger := zap.NewExample()
+	logger.ReplaceGlobals(testLogger)
+	defer logger.ReplaceGlobals(logger.L())
+
+	testLogger.Info("Starting TestOutputBenchmarkResults")
+
 	// Создаем тестовые данные
 	results := []benchmarkResult{
 		{

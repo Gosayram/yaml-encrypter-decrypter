@@ -1,12 +1,20 @@
 package processor
 
 import (
-	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/atlet99/yaml-encrypter-decrypter/pkg/logger"
+	"go.uber.org/zap"
 )
 
 func TestProtectFoldedStyleSections(t *testing.T) {
+	testLogger := zap.NewExample()
+	logger.ReplaceGlobals(testLogger)
+	defer logger.ReplaceGlobals(logger.L())
+
+	testLogger.Info("Starting TestProtectFoldedStyleSections")
+
 	tests := []struct {
 		name                string
 		content             string
@@ -296,8 +304,9 @@ key4: value4`,
 			sections, processed := protectFoldedStyleSections([]byte(content), true)
 
 			// Debug print
-			fmt.Printf("Protected content (%d sections):\n%s\n",
-				len(sections), string(processed))
+			logger.L().Debug("Protected content",
+				zap.Int("sections", len(sections)),
+				zap.String("content", string(processed)))
 
 			// Optional processing could happen here
 
@@ -305,7 +314,7 @@ key4: value4`,
 			result := restoreFoldedStyleSections(processed, sections, true)
 
 			// Debug print
-			fmt.Printf("Restored content:\n%s\n", string(result))
+			logger.L().Debug("Restored content", zap.String("content", string(result)))
 
 			// Compare results
 			if string(result) != expected {

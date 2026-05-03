@@ -3,9 +3,18 @@ package encryption
 import (
 	"strings"
 	"testing"
+
+	"github.com/atlet99/yaml-encrypter-decrypter/pkg/logger"
+	"go.uber.org/zap"
 )
 
 func BenchmarkEncrypt(b *testing.B) {
+	testLogger := zap.NewExample()
+	logger.ReplaceGlobals(testLogger)
+	defer logger.ReplaceGlobals(logger.L())
+
+	testLogger.Info("Starting BenchmarkEncrypt")
+
 	// Use a strong password that meets all requirements
 	password := "P@ssw0rd_Str0ng!T3st#2024"
 	plaintext := strings.Repeat("This is a test. ", 100)
@@ -19,6 +28,12 @@ func BenchmarkEncrypt(b *testing.B) {
 }
 
 func BenchmarkDecrypt(b *testing.B) {
+	testLogger := zap.NewExample()
+	logger.ReplaceGlobals(testLogger)
+	defer logger.ReplaceGlobals(logger.L())
+
+	testLogger.Info("Starting BenchmarkDecrypt")
+
 	// Use a strong password that meets all requirements
 	password := "P@ssw0rd_Str0ng!T3st#2024"
 	plaintext := strings.Repeat("This is a test. ", 100)
@@ -39,6 +54,12 @@ func BenchmarkDecrypt(b *testing.B) {
 
 // BenchmarkEncryptionWithAlgorithms compares the performance of encryption with different algorithms
 func BenchmarkEncryptionWithAlgorithms(b *testing.B) {
+	testLogger := zap.NewExample()
+	logger.ReplaceGlobals(testLogger)
+	defer logger.ReplaceGlobals(logger.L())
+
+	testLogger.Info("Starting BenchmarkEncryptionWithAlgorithms")
+
 	// Use a strong password that meets all requirements
 	password := "P@ssw0rd_Str0ng!T3st#2024"
 	plaintext := "This is sensitive data that needs to be encrypted"

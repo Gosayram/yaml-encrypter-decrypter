@@ -4,12 +4,20 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/atlet99/yaml-encrypter-decrypter/pkg/logger"
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 )
 
 // TestCertificateFormatting is a comprehensive test for certificate handling
 // with different YAML formatting styles
 func TestCertificateFormatting(t *testing.T) {
+	testLogger := zap.NewExample()
+	logger.ReplaceGlobals(testLogger)
+	defer logger.ReplaceGlobals(logger.L())
+
+	testLogger.Info("Starting TestCertificateFormatting")
+
 	// Test key for encryption/decryption - using a stronger key that meets requirements
 	testKey := "S9f&h27!Gp*3K5^LmZ#qR8@tUvWxYz" // Strong password with uppercase, lowercase, numbers and special chars
 
