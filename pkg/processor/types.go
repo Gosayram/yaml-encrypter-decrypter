@@ -95,6 +95,7 @@ const (
 	RangeRegexMatchCount = 3
 )
 
+// Rule defines an encryption/decryption rule for YAML fields
 type Rule struct {
 	Name        string `yaml:"name"`
 	Block       string `yaml:"block"`   // Block to which the rule applies (e.g., "smart_config" or "*")

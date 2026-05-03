@@ -11,6 +11,7 @@ type ValidationError struct {
 	Reason   string
 }
 
+// Error returns the error message for the validation error
 func (e *ValidationError) Error() string {
 	return fmt.Sprintf("rule '%s' is %s", e.RuleName, e.Reason)
 }
@@ -20,6 +21,7 @@ type RuleConflictError struct {
 	Conflict string
 }
 
+// Error returns the error message for the rule conflict error
 func (e *RuleConflictError) Error() string {
 	return fmt.Sprintf("rule conflict detected: %s", e.Conflict)
 }
@@ -30,10 +32,12 @@ type ConfigError struct {
 	Err  error
 }
 
+// Error returns the error message for the config error
 func (e *ConfigError) Error() string {
 	return fmt.Sprintf("config error: %s: %v", e.Path, e.Err)
 }
 
+// Unwrap returns the underlying error for the config error
 func (e *ConfigError) Unwrap() error {
 	return e.Err
 }
@@ -44,10 +48,12 @@ type ProcessingError struct {
 	Err  error
 }
 
+// Error returns the error message for the processing error
 func (e *ProcessingError) Error() string {
 	return fmt.Sprintf("processing error at %s: %v", e.Path, e.Err)
 }
 
+// Unwrap returns the underlying error for the processing error
 func (e *ProcessingError) Unwrap() error {
 	return e.Err
 }
@@ -59,10 +65,12 @@ type NodeError struct {
 	Err  error
 }
 
+// Error returns the error message for the node error
 func (e *NodeError) Error() string {
 	return fmt.Sprintf("node error at %s (line %d): %v", e.Path, e.Line, e.Err)
 }
 
+// Unwrap returns the underlying error for the node error
 func (e *NodeError) Unwrap() error {
 	return e.Err
 }
