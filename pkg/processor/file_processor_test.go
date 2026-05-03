@@ -1342,15 +1342,16 @@ func TestProcessYAMLWithExclusions(t *testing.T) {
 }
 
 func TestProcessFile_PreservesFormattingAfterEncryptDecrypt(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "TestProcessFilePreserveFormatting")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+	t.Parallel()
+
+	// Use t.TempDir() for automatic cleanup (Go 1.15+)
+	tempDir := t.TempDir()
 
 	yamlFile := filepath.Join(tempDir, "sample.yaml")
 	configFile := filepath.Join(tempDir, "config.yaml")
-	key := "K9#mP2$vL5@nR8&qX3*zAb4C"
+
+	// Extract test key as constant to avoid magic string
+	const testKey = "K9#mP2$vL5@nR8&qX3*zAb4C"
 
 	original := []byte(`# top comment
 service:
@@ -1379,7 +1380,7 @@ service:
 		t.Fatalf("Failed to write config file: %v", err)
 	}
 
-	if err := ProcessFile(yamlFile, key, OperationEncrypt, false, configFile); err != nil {
+	if err := ProcessFile(yamlFile, testKey, OperationEncrypt, false, configFile); err != nil {
 		t.Fatalf("encrypt ProcessFile failed: %v", err)
 	}
 
@@ -1398,7 +1399,7 @@ service:
 	}
 
 	// Decrypt and verify formatting is preserved
-	if err := ProcessFile(yamlFile, key, OperationDecrypt, false, configFile); err != nil {
+	if err := ProcessFile(yamlFile, testKey, OperationDecrypt, false, configFile); err != nil {
 		t.Fatalf("decrypt ProcessFile failed: %v", err)
 	}
 
