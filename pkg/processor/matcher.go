@@ -293,7 +293,9 @@ func loadRulesFromPattern(pattern string, baseDir string, debug bool) ([]Rule, e
 			// Verify file exists and is valid
 			rules, err := loadRulesFromFile(specificFile, debug)
 			if err != nil {
-				return nil, fmt.Errorf("error loading rules from '%s': %w", specificFile, err)
+				// Skip missing files when processing range patterns
+				debugLog(debug, "Skipping missing file in range pattern: %s", specificFile)
+				continue
 			}
 
 			allRules = append(allRules, rules...)
