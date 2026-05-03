@@ -142,3 +142,21 @@ func InitWithLevel(level string) error {
 func StdLogger() *zap.Logger {
 	return L()
 }
+
+// Named returns a named child logger according to zap best practices
+// This allows for better log organization and filtering by component
+func Named(name string) *zap.Logger {
+	if globalLogger == nil {
+		return zap.NewNop().Named(name)
+	}
+	return globalLogger.Named(name)
+}
+
+// With returns a logger with additional fields added according to zap best practices
+// This allows for adding context to loggers that will be included in all log entries
+func With(fields ...zap.Field) *zap.Logger {
+	if globalLogger == nil {
+		return zap.NewNop().With(fields...)
+	}
+	return globalLogger.With(fields...)
+}

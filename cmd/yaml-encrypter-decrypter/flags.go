@@ -47,6 +47,26 @@ func initFlags() {
 	pflag.BoolVarP(&appFlagsInstance.debug, "debug", "v", false, "Enable debug logging")
 	pflag.BoolVarP(&appFlagsInstance.showVersion, "version", "V", false, "Show version information")
 
+	// Set NoOptDefVal for boolean flags to allow them to be set without values
+	if flag := pflag.CommandLine.Lookup("debug"); flag != nil {
+		flag.NoOptDefVal = "true"
+	}
+	if flag := pflag.CommandLine.Lookup("version"); flag != nil {
+		flag.NoOptDefVal = "true"
+	}
+	if flag := pflag.CommandLine.Lookup("dry-run"); flag != nil {
+		flag.NoOptDefVal = "true"
+	}
+	if flag := pflag.CommandLine.Lookup("diff"); flag != nil {
+		flag.NoOptDefVal = "true"
+	}
+	if flag := pflag.CommandLine.Lookup("benchmark"); flag != nil {
+		flag.NoOptDefVal = "true"
+	}
+	if flag := pflag.CommandLine.Lookup("validate"); flag != nil {
+		flag.NoOptDefVal = "true"
+	}
+
 	// Advanced configuration flags
 	pflag.StringVarP(&appFlagsInstance.algorithm, "algorithm", "a", "", "Key derivation algorithm to use (argon2id, pbkdf2-sha256, pbkdf2-sha512)")
 	pflag.StringVarP(&appFlagsInstance.configPath, "config", "c", "", "Path to the .yed_config.yml file (default: .yed_config.yml in current directory)")
@@ -60,9 +80,9 @@ func initFlags() {
 	pflag.StringVarP(&appFlagsInstance.includeRules, "include-rules", "i", "", "Comma-separated list of additional rule files to include")
 
 	// Logging configuration flags
-	pflag.StringVar(&appFlagsInstance.logLevel, "log-level", "info", "Log level (debug, info, warn, error)")
-	pflag.StringVar(&appFlagsInstance.logFormat, "log-format", "console", "Log format (console, json)")
-	pflag.StringVar(&appFlagsInstance.logOutput, "log-output", "stderr", "Log output (stdout, stderr, or file path)")
+	pflag.StringVarP(&appFlagsInstance.logLevel, "log-level", "l", "info", "Log level (debug, info, warn, error)")
+	pflag.StringVarP(&appFlagsInstance.logFormat, "log-format", "F", "console", "Log format (console, json)")
+	pflag.StringVarP(&appFlagsInstance.logOutput, "log-output", "O", "stderr", "Log output (stdout, stderr, or file path)")
 
 	// Override default usage
 	pflag.Usage = func() {
@@ -90,9 +110,9 @@ func initFlags() {
 
 		fmt.Fprintln(os.Stderr, "Logging and Information:")
 		fmt.Fprintln(os.Stderr, "  -debug, -v            		Enable detailed debug logging")
-		fmt.Fprintln(os.Stderr, "  -log-level            		Log level (debug, info, warn, error)")
-		fmt.Fprintln(os.Stderr, "  -log-format           		Log format (console, json)")
-		fmt.Fprintln(os.Stderr, "  -log-output           		Log output (stdout, stderr, or file path)")
+		fmt.Fprintln(os.Stderr, "  -log-level, -l       		Log level (debug, info, warn, error)")
+		fmt.Fprintln(os.Stderr, "  -log-format, -F      		Log format (console, json)")
+		fmt.Fprintln(os.Stderr, "  -log-output, -O      		Log output (stdout, stderr, or file path)")
 		fmt.Fprintln(os.Stderr, "  -version, -V          		Display version and build information")
 		fmt.Fprintln(os.Stderr, "")
 

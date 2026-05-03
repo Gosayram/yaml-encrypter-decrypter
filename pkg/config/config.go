@@ -17,22 +17,22 @@ import (
 
 // Config holds the application configuration
 type Config struct {
-	Filename      string
-	Key           string
-	Operation     string
-	DryRun        bool
-	Diff          bool
-	Debug         bool
-	ShowVersion   bool
-	Algorithm     string
-	Benchmark     bool
-	BenchFile     string
-	ConfigPath    string
-	ValidateRules bool
-	IncludeRules  string
-	LogLevel      string
-	LogFormat     string
-	LogOutput     string
+	Filename      string `mapstructure:"file"`
+	Key           string `mapstructure:"key"`
+	Operation     string `mapstructure:"operation"`
+	DryRun        bool   `mapstructure:"dry-run"`
+	Diff          bool   `mapstructure:"diff"`
+	Debug         bool   `mapstructure:"debug"`
+	ShowVersion   bool   `mapstructure:"version"`
+	Algorithm     string `mapstructure:"algorithm"`
+	Benchmark     bool   `mapstructure:"benchmark"`
+	BenchFile     string `mapstructure:"bench-file"`
+	ConfigPath    string `mapstructure:"config"`
+	ValidateRules bool   `mapstructure:"validate"`
+	IncludeRules  string `mapstructure:"include-rules"`
+	LogLevel      string `mapstructure:"log-level"`
+	LogFormat     string `mapstructure:"log-format"`
+	LogOutput     string `mapstructure:"log-output"`
 }
 
 // Load loads configuration from flags, environment variables, and config file
@@ -98,6 +98,15 @@ func Load() (*Config, error) {
 	if err := v.BindPFlag("log-output", pflag.CommandLine.Lookup("log-output")); err != nil {
 		return nil, fmt.Errorf("failed to bind flag: %w", err)
 	}
+	if err := v.BindPFlag("log-level", pflag.CommandLine.Lookup("l")); err != nil {
+		return nil, fmt.Errorf("failed to bind flag: %w", err)
+	}
+	if err := v.BindPFlag("log-format", pflag.CommandLine.Lookup("F")); err != nil {
+		return nil, fmt.Errorf("failed to bind flag: %w", err)
+	}
+	if err := v.BindPFlag("log-output", pflag.CommandLine.Lookup("O")); err != nil {
+		return nil, fmt.Errorf("failed to bind flag: %w", err)
+	}
 
 	// Set defaults (lowest priority)
 	v.SetDefault("log-level", "info")
@@ -128,26 +137,18 @@ func Load() (*Config, error) {
 		}
 	}
 
-	// Create config struct
-	cfg := &Config{}
+	// Watch config file for changes (optional, won't error if file doesn't exist)
+	// This allows hot-reloading of configuration without restarting the application
+	v.WatchConfig()
 
-	// Read values from Viper (precedence: flag > env > config file > default)
-	cfg.Filename = v.GetString("file")
-	cfg.Key = v.GetString("key")
-	cfg.Operation = v.GetString("operation")
-	cfg.DryRun = v.GetBool("dry-run")
-	cfg.Diff = v.GetBool("diff")
-	cfg.Debug = v.GetBool("debug")
-	cfg.ShowVersion = v.GetBool("version")
-	cfg.Algorithm = v.GetString("algorithm")
-	cfg.Benchmark = v.GetBool("benchmark")
-	cfg.BenchFile = v.GetString("bench-file")
+	// Unmarshal config into struct using mapstructure tags
+	cfg := &Config{}
+	if err := v.Unmarshal(cfg); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+
+	// Set ConfigPath separately since it's not in the config file
 	cfg.ConfigPath = configPath
-	cfg.ValidateRules = v.GetBool("validate")
-	cfg.IncludeRules = v.GetString("include-rules")
-	cfg.LogLevel = v.GetString("log-level")
-	cfg.LogFormat = v.GetString("log-format")
-	cfg.LogOutput = v.GetString("log-output")
 
 	return cfg, nil
 }
