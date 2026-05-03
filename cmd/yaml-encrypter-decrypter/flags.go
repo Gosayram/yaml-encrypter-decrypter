@@ -30,6 +30,11 @@ type appFlags struct {
 	logOutput string
 }
 
+const (
+	// NoOptDefValue is the default value for boolean flags without explicit values
+	NoOptDefValue = "true"
+)
+
 var appFlagsInstance = appFlags{}
 
 // initFlags initializes all command line flags
@@ -49,22 +54,22 @@ func initFlags() {
 
 	// Set NoOptDefVal for boolean flags to allow them to be set without values
 	if flag := pflag.CommandLine.Lookup("debug"); flag != nil {
-		flag.NoOptDefVal = "true"
+		flag.NoOptDefVal = NoOptDefValue
 	}
 	if flag := pflag.CommandLine.Lookup("version"); flag != nil {
-		flag.NoOptDefVal = "true"
+		flag.NoOptDefVal = NoOptDefValue
 	}
 	if flag := pflag.CommandLine.Lookup("dry-run"); flag != nil {
-		flag.NoOptDefVal = "true"
+		flag.NoOptDefVal = NoOptDefValue
 	}
 	if flag := pflag.CommandLine.Lookup("diff"); flag != nil {
-		flag.NoOptDefVal = "true"
+		flag.NoOptDefVal = NoOptDefValue
 	}
 	if flag := pflag.CommandLine.Lookup("benchmark"); flag != nil {
-		flag.NoOptDefVal = "true"
+		flag.NoOptDefVal = NoOptDefValue
 	}
 	if flag := pflag.CommandLine.Lookup("validate"); flag != nil {
-		flag.NoOptDefVal = "true"
+		flag.NoOptDefVal = NoOptDefValue
 	}
 
 	// Advanced configuration flags

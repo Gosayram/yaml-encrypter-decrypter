@@ -5,7 +5,14 @@ import (
 	"strings"
 
 	"github.com/atlet99/yaml-encrypter-decrypter/pkg/encryption"
+	"github.com/atlet99/yaml-encrypter-decrypter/pkg/logger"
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
+)
+
+var (
+	// Named logger for processor component
+	processorLogger = logger.Named("processor")
 )
 
 // ProcessYAMLContent processes YAML content with the given rules (exported version)
@@ -22,6 +29,12 @@ func processYAMLContent(content []byte, key, operation string, rules []Rule, pro
 	if len(strings.TrimSpace(string(content))) == 0 {
 		return nil, fmt.Errorf("empty YAML content")
 	}
+
+	processorLogger.Debug("Starting YAML processing",
+		zap.String("operation", operation),
+		zap.Int("content_length", len(content)),
+		zap.Int("rules_count", len(rules)),
+	)
 
 	// Protect folded style sections before parsing
 	_, protectedContent := protectFoldedStyleSections(content, debug)

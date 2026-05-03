@@ -12,6 +12,11 @@ import (
 	"go.uber.org/zap"
 )
 
+var (
+	// Named logger for benchmark component
+	benchmarkLogger = logger.Named("benchmark")
+)
+
 const (
 	// TestPassword is a strong password used for benchmark testing only
 	TestPassword = "P@ssw0rd_Str0ng!T3st#2024"
@@ -53,7 +58,7 @@ func runBenchmarks(outputFile string) int {
 
 	// Output results
 	if err := outputBenchmarkResults(results, outputFile); err != nil {
-		logger.L().Error("Failed to output benchmark results", zap.Error(err))
+		benchmarkLogger.Error("Failed to output benchmark results", zap.Error(err))
 		return 1
 	}
 
@@ -161,7 +166,7 @@ func runDecryptionBenchmarks() []benchmarkResult {
 	// Prepare standard encrypted data
 	encrypted, err := encryption.Encrypt(TestPassword, plaintext)
 	if err != nil {
-		logger.L().Error("Failed to prepare encrypted data for benchmark")
+		benchmarkLogger.Error("Failed to prepare encrypted data for benchmark")
 		return results
 	}
 
@@ -188,7 +193,7 @@ func runDecryptionBenchmarks() []benchmarkResult {
 	for _, algo := range algorithms {
 		encrypted, err := encryption.Encrypt(TestPassword, plaintext, algo)
 		if err != nil {
-			logger.L().Error("Failed to prepare encrypted data for algorithm",
+			benchmarkLogger.Error("Failed to prepare encrypted data for algorithm",
 				zap.String("algorithm", string(algo)),
 				zap.Error(err))
 			continue

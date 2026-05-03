@@ -10,9 +10,13 @@ package config
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
+	"github.com/atlet99/yaml-encrypter-decrypter/pkg/logger"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
+	"go.uber.org/multierr"
+	"go.uber.org/zap"
 )
 
 // Config holds the application configuration
@@ -44,68 +48,50 @@ func Load() (*Config, error) {
 	v.SetEnvPrefix("YED")
 	v.AutomaticEnv()
 
+	// Set up environment variable key replacer to allow env vars with underscores
+	// to map to config keys with hyphens (e.g., YED_LOG_LEVEL -> log-level)
+	v.SetEnvKeyReplacer(strings.NewReplacer("-", "_", ".", "_"))
+
 	// Bind environment variables
+	var bindErr error
 	if err := v.BindEnv("encryption-key", "ENCRYPTION_KEY"); err != nil {
-		return nil, fmt.Errorf("failed to bind environment variable: %w", err)
+		bindErr = multierr.Append(bindErr, fmt.Errorf("failed to bind environment variable: %w", err))
 	}
 
 	// Bind pflags to Viper (flags have highest priority)
-	if err := v.BindPFlag("file", pflag.CommandLine.Lookup("file")); err != nil {
-		return nil, fmt.Errorf("failed to bind flag: %w", err)
+	flagBindings := []struct {
+		key  string
+		flag string
+	}{
+		{"file", "file"},
+		{"key", "key"},
+		{"operation", "operation"},
+		{"dry-run", "dry-run"},
+		{"diff", "diff"},
+		{"debug", "debug"},
+		{"version", "version"},
+		{"algorithm", "algorithm"},
+		{"benchmark", "benchmark"},
+		{"bench-file", "bench-file"},
+		{"config", "config"},
+		{"validate", "validate"},
+		{"include-rules", "include-rules"},
+		{"log-level", "log-level"},
+		{"log-format", "log-format"},
+		{"log-output", "log-output"},
+		{"log-level", "l"},
+		{"log-format", "F"},
+		{"log-output", "O"},
 	}
-	if err := v.BindPFlag("key", pflag.CommandLine.Lookup("key")); err != nil {
-		return nil, fmt.Errorf("failed to bind flag: %w", err)
+
+	for _, binding := range flagBindings {
+		if err := v.BindPFlag(binding.key, pflag.CommandLine.Lookup(binding.flag)); err != nil {
+			bindErr = multierr.Append(bindErr, fmt.Errorf("failed to bind flag %s: %w", binding.flag, err))
+		}
 	}
-	if err := v.BindPFlag("operation", pflag.CommandLine.Lookup("operation")); err != nil {
-		return nil, fmt.Errorf("failed to bind flag: %w", err)
-	}
-	if err := v.BindPFlag("dry-run", pflag.CommandLine.Lookup("dry-run")); err != nil {
-		return nil, fmt.Errorf("failed to bind flag: %w", err)
-	}
-	if err := v.BindPFlag("diff", pflag.CommandLine.Lookup("diff")); err != nil {
-		return nil, fmt.Errorf("failed to bind flag: %w", err)
-	}
-	if err := v.BindPFlag("debug", pflag.CommandLine.Lookup("debug")); err != nil {
-		return nil, fmt.Errorf("failed to bind flag: %w", err)
-	}
-	if err := v.BindPFlag("version", pflag.CommandLine.Lookup("version")); err != nil {
-		return nil, fmt.Errorf("failed to bind flag: %w", err)
-	}
-	if err := v.BindPFlag("algorithm", pflag.CommandLine.Lookup("algorithm")); err != nil {
-		return nil, fmt.Errorf("failed to bind flag: %w", err)
-	}
-	if err := v.BindPFlag("benchmark", pflag.CommandLine.Lookup("benchmark")); err != nil {
-		return nil, fmt.Errorf("failed to bind flag: %w", err)
-	}
-	if err := v.BindPFlag("bench-file", pflag.CommandLine.Lookup("bench-file")); err != nil {
-		return nil, fmt.Errorf("failed to bind flag: %w", err)
-	}
-	if err := v.BindPFlag("config", pflag.CommandLine.Lookup("config")); err != nil {
-		return nil, fmt.Errorf("failed to bind flag: %w", err)
-	}
-	if err := v.BindPFlag("validate", pflag.CommandLine.Lookup("validate")); err != nil {
-		return nil, fmt.Errorf("failed to bind flag: %w", err)
-	}
-	if err := v.BindPFlag("include-rules", pflag.CommandLine.Lookup("include-rules")); err != nil {
-		return nil, fmt.Errorf("failed to bind flag: %w", err)
-	}
-	if err := v.BindPFlag("log-level", pflag.CommandLine.Lookup("log-level")); err != nil {
-		return nil, fmt.Errorf("failed to bind flag: %w", err)
-	}
-	if err := v.BindPFlag("log-format", pflag.CommandLine.Lookup("log-format")); err != nil {
-		return nil, fmt.Errorf("failed to bind flag: %w", err)
-	}
-	if err := v.BindPFlag("log-output", pflag.CommandLine.Lookup("log-output")); err != nil {
-		return nil, fmt.Errorf("failed to bind flag: %w", err)
-	}
-	if err := v.BindPFlag("log-level", pflag.CommandLine.Lookup("l")); err != nil {
-		return nil, fmt.Errorf("failed to bind flag: %w", err)
-	}
-	if err := v.BindPFlag("log-format", pflag.CommandLine.Lookup("F")); err != nil {
-		return nil, fmt.Errorf("failed to bind flag: %w", err)
-	}
-	if err := v.BindPFlag("log-output", pflag.CommandLine.Lookup("O")); err != nil {
-		return nil, fmt.Errorf("failed to bind flag: %w", err)
+
+	if bindErr != nil {
+		return nil, bindErr
 	}
 
 	// Set defaults (lowest priority)
@@ -149,6 +135,17 @@ func Load() (*Config, error) {
 
 	// Set ConfigPath separately since it's not in the config file
 	cfg.ConfigPath = configPath
+
+	// Log configuration source information for debugging
+	if v.IsSet("file") {
+		logger.L().Debug("file flag explicitly set", zap.String("file", cfg.Filename))
+	}
+	if v.IsSet("key") {
+		logger.L().Debug("key flag explicitly set (from flag or env)")
+	}
+	if v.IsSet("config") {
+		logger.L().Debug("config file explicitly set", zap.String("config", cfg.ConfigPath))
+	}
 
 	return cfg, nil
 }

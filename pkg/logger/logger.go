@@ -5,8 +5,19 @@
 package logger
 
 import (
+	"time"
+
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+)
+
+const (
+	// samplingTick is the time interval for sampling
+	samplingTick = time.Second
+	// samplingFirst is the number of messages to log in the first tick interval
+	samplingFirst = 100
+	// samplingThereafter is the number of messages to log after the first tick interval
+	samplingThereafter = 100
 )
 
 var (
@@ -18,10 +29,11 @@ var (
 
 // Config holds logger configuration
 type Config struct {
-	Level       string // debug, info, warn, error
-	Development bool   // development mode with console output
-	Encoding    string // json or console
-	OutputPath  string // stdout, stderr, or file path
+	Level           string // debug, info, warn, error
+	Development     bool   // development mode with console output
+	Encoding        string // json or console
+	OutputPath      string // stdout, stderr, or file path
+	SamplingEnabled bool   // enable sampling for high-frequency logs
 }
 
 // DefaultConfig returns default logger configuration
@@ -56,9 +68,21 @@ func Initialize(cfg Config) error {
 		return err
 	}
 
+	// Add sampling for high-frequency logs if enabled
+	if cfg.SamplingEnabled {
+		logger = loggerWithOptions(logger, zap.WrapCore(func(core zapcore.Core) zapcore.Core {
+			return zapcore.NewSamplerWithOptions(core, samplingTick, samplingFirst, samplingThereafter)
+		}))
+	}
+
 	globalLogger = logger
 	globalSugar = logger.Sugar()
 	return nil
+}
+
+// loggerWithOptions applies options to a logger
+func loggerWithOptions(logger *zap.Logger, opts ...zap.Option) *zap.Logger {
+	return logger.WithOptions(opts...)
 }
 
 // parseLevel converts string level to zapcore.Level

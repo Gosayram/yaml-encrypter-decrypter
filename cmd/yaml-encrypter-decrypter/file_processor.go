@@ -13,6 +13,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+var (
+	// Named logger for file processor component
+	fileProcessorLogger = logger.Named("file-processor")
+)
+
 // processFileWithInterruptHandling processes the file and handles interruption signals
 func processFileWithInterruptHandling(flags appFlags, keyBuffer *memguard.LockedBuffer, rules []processor.Rule) int {
 	// Set up signal handling
@@ -25,7 +30,7 @@ func processFileWithInterruptHandling(flags appFlags, keyBuffer *memguard.Locked
 	// Process file in a goroutine
 	go func() {
 		if flags.diff {
-			logger.L().Debug("Before ShowDiff",
+			fileProcessorLogger.Debug("Before ShowDiff",
 				zap.String("config_path", flags.configPath))
 			errChan <- processor.ShowDiff(flags.filename, string(keyBuffer.Bytes()), flags.operation, flags.debug, flags.configPath)
 			return
@@ -43,12 +48,12 @@ func processFileWithInterruptHandling(flags appFlags, keyBuffer *memguard.Locked
 	select {
 	case err := <-errChan:
 		if err != nil {
-			logger.L().Error("Processing error", zap.Error(err))
+			fileProcessorLogger.Error("Processing error", zap.Error(err))
 			return 1
 		}
 		return 0
 	case <-sigChan:
-		logger.L().Warn("Operation interrupted")
+		fileProcessorLogger.Warn("Operation interrupted")
 		return 1
 	}
 }
