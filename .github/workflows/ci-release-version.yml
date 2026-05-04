@@ -29,10 +29,25 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Configure git
+      - name: Import GPG key
+        run: echo "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --batch --import
+
+      - name: Add custom GPG signing script with passphrase
         run: |
+          rm -rf /tmp/gpg.sh
+          echo '#!/bin/bash' >> /tmp/gpg.sh
+          echo 'gpg --batch --pinentry-mode=loopback --passphrase $GPG_PASSPHRASE $@' >> /tmp/gpg.sh
+          chmod +x /tmp/gpg.sh
+
+      - name: Configure git for GPG signing
+        run: |
+          git config commit.gpgsign true
+          git config user.signingkey ${{ secrets.GPG_KEY_ID }}
+          git config gpg.program /tmp/gpg.sh
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        env:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
       - name: Determine next tag and update file
         run: |
