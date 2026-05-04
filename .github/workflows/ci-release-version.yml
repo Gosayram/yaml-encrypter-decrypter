@@ -75,7 +75,7 @@ jobs:
       - name: Commit .release-version and CHANGELOG
         run: |
           git add .release-version CHANGELOG.md
-          git commit -m "[RELEASE] - update .release-version and CHANGELOG;" || exit 0
+          git commit -m "[RELEASE] - update .release-version and CHANGELOG;"
           git push origin HEAD:main
 
       - name: Create and push tag
