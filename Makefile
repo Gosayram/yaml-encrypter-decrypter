@@ -18,7 +18,7 @@ GODOCLINT_BIN := $(GO_BIN_DIR)/godoclint
 
 # Tooling versions (pinned for reproducible CI/local checks)
 GOLANGCI_LINT_VERSION ?= v2.11.4
-STATICCHECK_VERSION ?= v0.7.0
+STATICCHECK_VERSION ?= 2026.1
 GODOCLINT_VERSION ?= latest
 
 # Load application targets
