@@ -32,7 +32,6 @@ jobs:
 
       - name: Configure git
         run: |
-          git config --global url."https://x-access-token:${{ secrets.CONTENT_RELEASE }}@github.com/".insteadOf "https://github.com/"
           git config user.name "atlet99"
           git config user.email "joha.shadibekov@gmail.com"
 
@@ -81,28 +80,18 @@ jobs:
     needs: [update_release_version]
     if: always()
     steps:
-      - name: Send telegram notification
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TG_RELEASER_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.YED_CHAT_ID }}
-          JOB_RESULT: ${{ needs.update_release_version.result }}
-        run: |
-          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
-            echo "Telegram secrets not set, skipping notification"
-            exit 0
-          fi
+      - name: Send Telegram notification
+        if: always()
+        uses: appleboy/telegram-action@221e6b684967abe813051ee4a37dd61770a83ad3 # v1.0.1
+        with:
+          to: ${{ secrets.YED_CHAT_ID }}
+          token: ${{ secrets.TG_RELEASER_TOKEN }}
+          format: html
+          message: |
+            <b>Version Automation:</b> ${{ needs.update_release_version.result }}
 
-          if [ "$JOB_RESULT" = "success" ]; then
-            ICON="✅"
-            STATE="SUCCESS"
-          else
-            ICON="❌"
-            STATE="FAILED"
-          fi
-
-          MSG="<b>Version Automation:</b> $STATE%0A%0A<b>Information:</b>%0ARepository: ${{ github.repository }}%0ABranch: ${{ github.ref_name }}%0AActor: ${{ github.actor }}%0ARun: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-
-          curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-            -d chat_id="${TELEGRAM_CHAT_ID}" \
-            -d parse_mode="HTML" \
-            -d text="${MSG}"
+            <b>Information:</b>
+            <b>Repository:</b> <code>${{ github.repository }}</code>
+            <b>Branch:</b> <code>${{ github.ref_name }}</code>
+            <b>Actor:</b> <code>${{ github.actor }}</code>
+            <b>Run:</b> <a href="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}">View run</a>
