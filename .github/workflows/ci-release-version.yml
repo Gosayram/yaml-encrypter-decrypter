@@ -74,12 +74,24 @@ jobs:
 
       - name: Commit .release-version and CHANGELOG
         run: |
+          rm -rf /tmp/gpg.sh
+          echo '#!/bin/bash' >> /tmp/gpg.sh
+          echo 'gpg --batch --pinentry-mode=loopback --passphrase $GPG_PASSPHRASE $@' >> /tmp/gpg.sh
+          chmod +x /tmp/gpg.sh
+          git config gpg.program /tmp/gpg.sh
           git add .release-version CHANGELOG.md
           git commit -m "[RELEASE] - update .release-version and CHANGELOG;"
           git push origin main
+        env:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
       - name: Create and push tag
         run: |
+          rm -rf /tmp/gpg.sh
+          echo '#!/bin/bash' >> /tmp/gpg.sh
+          echo 'gpg --batch --pinentry-mode=loopback --passphrase $GPG_PASSPHRASE $@' >> /tmp/gpg.sh
+          chmod +x /tmp/gpg.sh
+          git config gpg.program /tmp/gpg.sh
           new_tag=$(head -n 1 .release-version)
           if git rev-parse "$new_tag" >/dev/null 2>&1; then
             echo "Tag $new_tag already exists, skipping"
@@ -87,3 +99,5 @@ jobs:
           fi
           git tag "$new_tag"
           git push origin "$new_tag"
+        env:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
