@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-version-${{ github.ref }}
+  group: release-version-${{ github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -75,8 +75,8 @@ jobs:
       - name: Commit .release-version and CHANGELOG
         run: |
           git add .release-version CHANGELOG.md
-          git commit -m "[RELEASE] - update .release-version and CHANGELOG;" || exit 0
-          git push origin HEAD:main
+          git commit -m "[RELEASE] - update .release-version and CHANGELOG;"
+          git push origin main
 
       - name: Create and push tag
         run: |
@@ -87,25 +87,3 @@ jobs:
           fi
           git tag "$new_tag"
           git push origin "$new_tag"
-
-  notify:
-    name: Telegram Notify
-    runs-on: ubuntu-latest
-    needs: [update_release_version]
-    if: always()
-    steps:
-      - name: Send Telegram notification
-        if: always()
-        uses: appleboy/telegram-action@221e6b684967abe813051ee4a37dd61770a83ad3 # v1.0.1
-        with:
-          to: ${{ secrets.YED_CHAT_ID }}
-          token: ${{ secrets.TG_RELEASER_TOKEN }}
-          format: html
-          message: |
-            <b>Version Automation:</b> ${{ needs.update_release_version.result }}
-
-            <b>Information:</b>
-            <b>Repository:</b> <code>${{ github.repository }}</code>
-            <b>Branch:</b> <code>${{ github.ref_name }}</code>
-            <b>Actor:</b> <code>${{ github.actor }}</code>
-            <b>Run:</b> <a href="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}">View run</a>
