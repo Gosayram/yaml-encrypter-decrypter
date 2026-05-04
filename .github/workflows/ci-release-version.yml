@@ -28,12 +28,11 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
-          token: ${{ secrets.CONTENT_RELEASE }}
 
       - name: Configure git
         run: |
-          git config user.name "atlet99"
-          git config user.email "joha.shadibekov@gmail.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Determine next tag and update file
         run: |
