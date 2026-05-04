@@ -32,7 +32,6 @@ jobs:
 
       - name: Configure git
         run: |
-          git config --global url."https://x-access-token:${{ secrets.CONTENT_RELEASE }}@github.com/".insteadOf "https://github.com/"
           git config user.name "atlet99"
           git config user.email "joha.shadibekov@gmail.com"
 
